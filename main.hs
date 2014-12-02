@@ -90,14 +90,15 @@ simulate = playIO
 	where
 		display  			  = InWindow "Simulator" (width, height) (25, 25)
 		world 	 			  = map (\ (p, v, g) -> Body p v g) [((0.0,0.0), v, g), ((10.0,0.0), (-20.0, 15.0), g), ((35.0,-28.0), v, g)]
-		render w 	 		  = return . pictures $ map drawBall w ++ [drawGround w]
-		drawBall (Body (x, y) _ _)  = color red . translate x y $ circleSolid 15
+		render w 	 		  = return . pictures $ (map (uncurry drawBall) $ zip colours w) ++ [drawGround w, renderGrid 15 15 width height] -- TODO: Refactor this ugly mess
+		drawBall col (Body (x, y) _ _)  = color col . translate x y $ circleSolid 15 -- TODO: Reorder arguments (?)
 		drawGround _ 		  = translate 0 (30/2-fromIntegral height/2) . color green $ rectangleSolid (fromIntegral width) 30
 		respond e w 		  = return w
 		advance t w 		  = return . map (animate t) $ w
 		v 					  = (40.0, 20.0) --40.0 :+ 20.0
 		g 					  = (0.0, -98.2) --0.0 :+ (-9.82)
 		(width, height) 	  = (740, 540)
+		colours = cycle [red, green, orange]
 		--parabola t v a p = let (px:+py) = p; (vx:+vy) = v; (ax:+ay) = a in (px + vx*t + 0.5*ax*t**2):+(py + vy*t + 0.5*ay*t**2)
 
 
@@ -107,7 +108,16 @@ simulate = playIO
 
 
 --
---renderGrid
+-- Subgrids, colours, thickness, markings, hover for coordinates, snap-to-grid
+renderGrid :: Float -> Float -> Int -> Int -> Picture
+renderGrid dx dy w' h' = pictures $ rows ++ cols
+	where
+		cols = map (\cl -> line [(cl*dx-w/2, -h/2), (cl*dx-w/2, h/2)]) [1..cls]
+		rows = map (\rw -> line [(-w/2, rw*dy-h/2), (w/2, rw*dy-h/2)]) [1..rws]
+		rws  = h / dy -- Number of rows
+		cls  = w / dx -- Number of columns
+		w 	 = fromIntegral w'
+		h 	 = fromIntegral h'
 
 
 
