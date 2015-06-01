@@ -1,7 +1,12 @@
---
--- Main.hs - Copernicus
--- Entry point for the Copernicus project
---
+-- |
+-- Module      : main
+-- Description : Entry point for the Copernicus project
+-- Copyright   : (c) Jonatan H Sundqvist, 2015
+-- License     : MIT
+-- Maintainer  : Jonatan H Sundqvist
+-- Stability   : experimental
+-- Portability : POSIX (not sure)
+-- 
 -- Jonatan H Sundqvist
 -- November 25 2014
 --
@@ -10,6 +15,12 @@
 --        - Cartoon earth with gravitational field
 --        - Flexible event handling
 --        - App typeclass (run, manage events, window properties, etc.)
+--        - Lenses
+--        - Options (eg. toggle grid) (cf. 'when')
+--        - UI
+--        - Use types to encode units (eg. SI, radians)
+--        - Move to Cairo (branch?)
+
 
 -- SPEC | -
 --        -
@@ -30,6 +41,8 @@ import Graphics.Gloss.Interface.IO.Game
 import Graphics.Gloss.Data.Vector
 import Data.Complex
 
+import Control.Monad (when)
+
 
 
 ---------------------------------------------------------------------------------------------------
@@ -41,11 +54,10 @@ clampAngle = radToDeg . normaliseAngle . degToRad
 
 --
 parabola :: Float -> Vector -> Vector -> Vector -> Vector
-parabola t p v a = (px + vx*t + 0.5*ax*t**2, py + vy*t + 0.5*ay*t**2)
-	where
-		(px,py) = p
-		(vx,vy) = v
-		(ax,ay) = a
+parabola t p v a = let (px,py) = p
+                       (vx,vy) = v
+                       (ax,ay) = a
+                   in (px + vx*t + 0.5*ax*t**2, py + vy*t + 0.5*ay*t**2)
 
 
 -- Make typeclass (mesh, body, bounding box, collision, etc) (?)
@@ -53,18 +65,25 @@ data Body = Body Vector Vector Vector
 
 
 --
+-- TODO: Make them change colour when bouncing (?)
 animate :: Float -> Body -> Body
 animate t (Body p v a) = collide (30+30/2-540/2) $ Body (parabola t p v a) (v + mulSV t a) a
 
 
 -- collide
 -- Very primitive for now
+-- TODO: Use 'contains' function (Range -> Value -> Bool)
 collide :: Float -> Body -> Body
 collide gnd (Body (px, py) (vx, vy) a) = Body (px, py) (invertIf (\ v -> (px <= 15-720/2) || ( px >= (720/2-30/2))) vx, invertIf (\ v -> (v < 0) && (py <= gnd)) vy) a
 	where invertIf p v
 		| p v 		= -v
 		| otherwise =  v
 
+
+-- | ETA (estimated time of arrival)
+-- TODO: Rename (eg. timeUntil, solveForT, etc)
+-- TODO: Parabola type (eg. Parabola a v x)
+-- eta :: Acceleration
 
 
 -- Transforms a vector from one coordinate space to another
@@ -74,6 +93,10 @@ transform :: Vector -> Vector -> Picture -> Picture
 transform sc tr = uncurry scale sc . uncurry translate tr
 
 
+
+-- Utilities (should eventually be moved to separate module or library ----------------------------
+-- Python-style String formatting (eg. keyword interpolation, {0}, customisation, format specs.)
+-- Parsec
 
 ---------------------------------------------------------------------------------------------------
 -- Interaction
@@ -89,22 +112,23 @@ simulate = playIO
 	advance 	-- Advances the world to the next simulation step
 	where
 		display  			  = InWindow "Simulator" (width, height) (25, 25)
-		world 	 			  = map (\ (p, v, g) -> Body p v g) [((0.0,0.0), v, g), ((10.0,0.0), (-20.0, 15.0), g), ((35.0,-28.0), v, g)]
-		render w 	 		  = return . pictures $ (map (uncurry drawBall) $ zip colours w) ++ [drawGround w, renderGrid 15 15 width height] -- TODO: Refactor this ugly mess
-		drawBall col (Body (x, y) _ _)  = color col . translate x y $ circleSolid 15 -- TODO: Reorder arguments (?)
+		world 	 			  = map (\ (p, v, g) -> Body p v g) [((0.0,0.0), v, g), ((10.0,0.0), (-20.0, 15.0), g), ((35.0,-28.0), v, g), ((20.5, 19.2), v, g)]
+		render w 	 		  = return . pictures $ zipWith drawBall colours w ++ [drawGround w, renderGrid 45 45 width height] 	-- TODO: Refactor this ugly mess
+		drawBall col (Body (x, y) _ _)  = color col . translate x y $ circleSolid 15 												-- TODO: Reorder arguments (?)
 		drawGround _ 		  = translate 0 (30/2-fromIntegral height/2) . color green $ rectangleSolid (fromIntegral width) 30
-		respond e w 		  = return w
+		respond e 		      = return
 		advance t w 		  = return . map (animate t) $ w
 		v 					  = (40.0, 20.0) --40.0 :+ 20.0
 		g 					  = (0.0, -98.2) --0.0 :+ (-9.82)
 		(width, height) 	  = (740, 540)
-		colours = cycle [red, green, orange]
+		colours = cycle [red, green, orange, makeColor 0.2 0.1 0.3 1.0]
 		--parabola t v a p = let (px:+py) = p; (vx:+vy) = v; (ax:+ay) = a in (px + vx*t + 0.5*ax*t**2):+(py + vy*t + 0.5*ay*t**2)
 
 
 
 --
 --renderForces
+
 
 
 --
@@ -127,3 +151,4 @@ renderGrid dx dy w' h' = pictures $ rows ++ cols
 main :: IO ()
 main = do
 	simulate
+	putStrLn "Finished"
