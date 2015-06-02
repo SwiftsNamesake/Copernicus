@@ -30,14 +30,22 @@
 import Graphics.UI.Gtk -- hiding (fill)
 import qualified Graphics.Rendering.Cairo as C
 
+import Control.Monad (when)
+
+
+
+---------------------------------------------------------------------------------------------------
+-- Data
+---------------------------------------------------------------------------------------------------
+animate = True
+
 
 
 ---------------------------------------------------------------------------------------------------
 -- Functions
 ---------------------------------------------------------------------------------------------------
-animate = True
-render :: IO ()
-render = do
+mainGTK :: IO ()
+mainGTK = do
     initGUI
     window <- windowNew
 
@@ -45,21 +53,28 @@ render = do
     canvas <- drawingAreaNew
     containerAdd frame canvas
 
-    set window [ containerChild := canvas ]
+    set window [ containerChild := frame ]
     windowSetDefaultSize window 300 300
 
     -- onExpose da (exposeHandler da draw)
-    if animate
-      then timeoutAdd (widgetQueueDraw canvas >> return True) 16 >> return ()
-      else return ()
-    canvas `on` draw $ myDraw 300 300
+    when animate $ timeoutAdd (widgetQueueDraw canvas >> return True) 16 >> return ()
+
+    canvas `on` draw $ render 300 300
     window `on` deleteEvent $ C.liftIO mainQuit >> return False -- TODO: Uhmmm... what?
+    
     widgetShowAll window
     mainGUI
 
 
-myDraw :: Double -> Double -> C.Render ()
-myDraw w h = do
+widgetSize :: Widget -> IO (Float, Float)
+widgetSize widget = do
+    w <- widgetGetAllocatedWidth widget
+    h <- widgetGetAllocatedHeight widget
+    return (w, h)
+
+
+render :: Double -> Double -> C.Render ()
+render w h = do
            C.setSourceRGB 1 1 1
            C.paint
 
@@ -82,10 +97,11 @@ myDraw w h = do
            C.rectangle (0.5 * w) 0 (0.5 * w) (0.5 * h)
            C.setSourceRGBA 0 0 1 0.4
            C.fill
+
+
+
 ---------------------------------------------------------------------------------------------------
 -- Entry point
 ---------------------------------------------------------------------------------------------------
 main :: IO ()
-main = do
-    putStrLn "Message"
-    render
+main = mainGTK
