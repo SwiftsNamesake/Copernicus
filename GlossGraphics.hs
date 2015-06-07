@@ -26,8 +26,8 @@ module GlossGraphics where
 ---------------------------------------------------------------------------------------------------
 -- We'll need these
 ---------------------------------------------------------------------------------------------------
-import Graphics.Gloss.Data.Picture (line)
-import Graphics.Gloss (circleSolid, rectangleSolid)
+-- import Graphics.Gloss.Data.Picture (line)
+import qualified Graphics.Gloss as Gloss --(circleSolid, rectangleSolid)
 import Graphics.Gloss.Interface.IO.Game hiding (Vector)
 -- import Graphics.Gloss.Geometry.Angle (degToRad, radToDeg, normaliseAngle)
 -- import Graphics.Gloss.Data.Vector
@@ -60,14 +60,14 @@ simulate = playIO
 	respond 	-- User interaction
 	advance 	-- Advances the world to the next simulation step
 	where
-		display  			  = InWindow "Simulator" (width, height) (25, 25)
-		world 	 			  = World { bodies = map (\ (p, v, g) -> Body p v g) [(0.0:+0.0, v, g), (10.0:+0.0, (-20.0):+15.0, g), (35.0:+(-28.0), v, g), (20.5:+19.2, v, g)],
-	                                    grid   = True
-	                                  }
+		display = InWindow "Simulator" (width, height) (25, 25)
+		world   = World { bodies = map (\ (p', v', g') -> Body p' v' g') [(0.0:+0.0, v, g), (10.0:+0.0, (-20.0):+15.0, g), (35.0:+(-28.0), v, g), (20.5:+19.2, v, g)],
+	                      grid   = True
+	              }
 		-- TODO: Refactor this ugly mess
 		render w 	 		  = return . pictures $ zipWith drawBall colours (bodies w) ++ [drawGround (bodies w)] ++ if grid w then [renderGrid 45 45 width height] else [] 
 		drawBall col (Body (x:+y) _ _) = color col . translate x y $ circleSolid 15 												-- TODO: Reorder arguments (?)
-		drawGround _ 		  = translate 0 (30/2-fromIntegral height/2) . color green $ rectangleSolid (fromIntegral width) 30
+		drawGround _ 		  = translate 0 (30/2-fromIntegral height/2) . color green $ Gloss.rectangleSolid (fromIntegral width) 30
 		respond e w           = return $ case e of
 			EventKey (Char 'g') Down _ _ -> w { grid = not $ grid w }
 			_                            -> w

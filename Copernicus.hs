@@ -20,6 +20,7 @@
 --        - UI
 --        - Use types to encode units (eg. SI, radians)
 --        - Move to Cairo (branch?)
+--        - Polymorphic types (not just Floats) (?)
 
 -- SPEC | -
 --        -
@@ -44,8 +45,8 @@ import Graphics.Gloss.Geometry.Angle (degToRad, radToDeg, normaliseAngle)
 -- Types
 ---------------------------------------------------------------------------------------------------
 -- Make typeclass (mesh, body, bounding box, collision, etc) (?)
-type Vector = Complex Float
-data Body   = Body Vector Vector Vector -- Add argument
+type Vector = Complex Float -- TODO: Polymorphic (cf. related TODO item)
+data Body   = Body Vector Vector Vector deriving Show -- Add argument
 
 
 
@@ -77,7 +78,7 @@ parabola t p v a = let (px:+py) = p
 -- Very primitive for now
 -- TODO: Use 'contains' function (Range -> Value -> Bool)
 collide :: Float -> Body -> Body
-collide gnd (Body (px:+py) (vx:+vy) a) = Body (px:+py) ((invertIf (\ v -> (px <= 15-720/2) || ( px >= (720/2-30/2))) vx) :+ (invertIf (\ v -> (v < 0) && (py <= gnd)) vy)) a
+collide gnd (Body (px:+py) (vx:+vy) a) = Body (px:+py) ((invertIf (\ _ -> (px <= 15-720/2) || ( px >= (720/2-30/2))) vx) :+ (invertIf (\ v -> (v < 0) && (py <= gnd)) vy)) a
 	where invertIf p v
 		| p v 		= -v
 		| otherwise =  v
