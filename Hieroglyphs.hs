@@ -49,8 +49,8 @@ data World = World { frame :: Integer, size :: (Int, Int), bodies :: [Cop.Body] 
 ---------------------------------------------------------------------------------------------------
 -- Data
 ---------------------------------------------------------------------------------------------------
-animate = True :: Bool
-π       = pi   :: Double
+animate = True :: Bool   --
+π       = pi   :: Double -- TODO: Polymorphic (?)
 fps     = 30   :: Int
 
 -- g = 0:+9.82 -- TODO: Negate
@@ -145,25 +145,44 @@ renderWorld world = forM_ (bodies world) renderBody
 render :: World -> C.Render ()
 render world = do
     renderWorld world
-    renderCircleArc 10 origin spread radius 0 (2*π)
+    renderCircleArc 10 origin spread radius begin (2*π)
+    renderGrid 10 10 68
     where count  = 10
           origin = (w/2):+(h/2) 
           spread = 50 + 50 * (1 + sin (2.0*π * rpm * fromIntegral (frame world) * 1.0 / fromIntegral fps)) -- 134      -- Radius of the big circle (pixels?)
           radius = 20       -- Radius of a small circle (pixels?)
           (w,h)  = let (w', h') = size world in (fromIntegral w', fromIntegral h')
           rpm    = 0.3      --
-          -- θ = 2.0*π*(fromIntegral n / fromIntegral count) + 2.0*π * rpm * fromIntegral frm * (1.0 / fromIntegral fps) -- in
-
+          begin  = 2.0*π * rpm * fromIntegral (frame world) * (1.0 / fromIntegral fps)
+          -- begin  = 2.0*π*(fromIntegral n / fromIntegral count) + 2.0*π * rpm * fromIntegral frm * (1.0 / fromIntegral fps) -- in
 
 
 
 renderGrid :: Int -> Int -> Double -> C.Render ()
 renderGrid cols rows size = do
     sequence_ [ renderTile (fromIntegral cl) (fromIntegral rw) | cl <- [1..cols], rw <- [1..rows] ]
-    -- forM_ [1..cols] $ \ cl -> forM_
-    where chooseColour cl rw = if (cl `mod` 2) == (rw `mod` 2) then 0.3 else 0.75
-          renderTile cl rw   = C.rectangle (cl*size) (rw*size) size size >> C.setSourceRGBA 0 1.0 (chooseColour (floor cl) (floor rw)) 0.8 >> C.fill
+    where chooseColour cl rw = if (cl `mod` 2) == (rw `mod` 2) then 0.3 else 0.75 -- TODO: This should be a utility function
+          renderTile cl rw   = C.rectangle (cl*size) (rw*size) size size >> C.setSourceRGBA 0.22 0.81 (chooseColour (floor cl) (floor rw)) 0.32 >> C.fill
 
+
+
+polygon :: RealFloat f => Int -> f -> Complex f -> [Complex f]
+polygon sides radius origin = [ let θ = fromIntegral n * 2*pi/fromIntegral sides in origin + ((radius * cos θ):+(radius * sin θ)) | n <- [1..sides]]
+
+
+
+-- | 
+renderPolygon :: Int -> Double -> Cop.Vector -> Bool -> C.Render ()
+renderPolygon sides radius origin filled = do
+    let (sx:+sy) = origin+(realToFrac radius:+0) in C.moveTo (realToFrac sx) (realToFrac sy)
+    forM_ [1..sides] $ \n -> let θ        = fromIntegral n * π*2/fromIntegral sides
+                                 (vx:+vy) = origin+((realToFrac radius * cos θ) :+ (realToFrac radius * sin θ))
+                             in C.lineTo vx vy
+    C.setSourceRGBA 0 0 0 1.0
+    if filled
+        then C.fill
+        else C.stroke
+    -- when filled C.fill
 
 
 -- |
