@@ -42,7 +42,7 @@ import qualified Copernicus as Cop
 ---------------------------------------------------------------------------------------------------
 -- Types
 ---------------------------------------------------------------------------------------------------
-data World = World { frame :: Integer, size :: (Int, Int), bodies :: [Cop.Body] } deriving Show
+data World = World { frame :: Int, size :: (Int, Int), bodies :: [Cop.Body] } deriving Show
 
 
 
@@ -76,7 +76,7 @@ mainGTK = do
     containerAdd frame canvas
 
     set window [ containerChild := frame ]
-    windowSetDefaultSize window 500 500
+    windowSetDefaultSize window 650 650
 
     widgetShowAll window
 
@@ -144,6 +144,7 @@ renderWorld world = forM_ (bodies world) renderBody
 -- |
 render :: World -> C.Render ()
 render world = do
+    renderPolygon (frame world `div` fps) 42 (300:+300) False
     renderWorld world
     renderCircleArc 10 origin spread radius begin (2*π)
     renderGrid 10 10 68
@@ -166,18 +167,25 @@ renderGrid cols rows size = do
 
 
 
+
+-- |
+-- TODO: Start angle
+-- TODO: Invalid arguments (eg. sides < 3) (use Maybe?)
 polygon :: RealFloat f => Int -> f -> Complex f -> [Complex f]
 polygon sides radius origin = [ let θ = fromIntegral n * 2*pi/fromIntegral sides in origin + ((radius * cos θ):+(radius * sin θ)) | n <- [1..sides]]
 
 
 
 -- | 
-renderPolygon :: Int -> Double -> Cop.Vector -> Bool -> C.Render ()
+-- TODO: Add arguments for colour, stroke, etc.
+renderPolygon :: Int -> Double -> Complex Double -> Bool -> C.Render ()
 renderPolygon sides radius origin filled = do
-    let (sx:+sy) = origin+(realToFrac radius:+0) in C.moveTo (realToFrac sx) (realToFrac sy)
-    forM_ [1..sides] $ \n -> let θ        = fromIntegral n * π*2/fromIntegral sides
-                                 (vx:+vy) = origin+((realToFrac radius * cos θ) :+ (realToFrac radius * sin θ))
-                             in C.lineTo vx vy
+    -- TODO: Refine 'wrap-around logic'
+    let ((fx:+fy):rest) = take (sides + 1) . cycle $ polygon sides radius origin in C.moveTo fx fy >> forM_ rest (\(x:+y) -> C.lineTo x y)
+    -- let (sx:+sy) = origin+(realToFrac radius:+0) in C.moveTo (realToFrac sx) (realToFrac sy)
+    -- forM_ [1..sides] $ \n -> let θ        = fromIntegral n * π*2/fromIntegral sides
+                                 -- (vx:+vy) = origin+((realToFrac radius * cos θ) :+ (realToFrac radius * sin θ))
+                             -- in C.lineTo vx vy
     C.setSourceRGBA 0 0 0 1.0
     if filled
         then C.fill
