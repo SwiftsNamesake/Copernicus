@@ -144,7 +144,7 @@ elapsed world = (fromIntegral $ frame world) * 1.0/fromIntegral fps
 -- |
 renderBody :: Cop.Body -> C.Render ()
 renderBody (Cop.Body (x:+y) v' g') = do
-    C.arc (realToFrac x/3 + 200) (realToFrac y/3 + 200) 12 0 τ
+    C.arc (x/3 + 200) (y/3 + 200) 12 0 τ
     C.setSourceRGBA 0 0.2 0.3 1.0
     C.fill
 
@@ -202,15 +202,15 @@ renderGrid cols rows size = do
 -- |
 -- TODO: Start angle
 -- TODO: Invalid arguments (eg. sides < 3) (use Maybe?)
-polygon :: RealFloat f => Int -> f -> Complex f -> [Complex f]
+polygon :: Floating f => Int -> f -> Complex f -> [Complex f]
 polygon sides radius origin = [ let θ = arg n in origin + ((radius * cos θ):+(radius * sin θ)) | n <- [1..sides]]
-    where arg n = fromIntegral n * τ/fromIntegral sides
+    where arg n = (fromIntegral n * (2*π)/fromIntegral sides :: f)
 
 
 
 -- | 
 -- TODO: Add arguments for colour, stroke, etc.
-renderPolygon :: RealFloat f => Int -> f -> Complex f -> (Double, Double, Double, Double) -> Bool -> C.Render ()
+renderPolygon :: Floating f => Int -> f -> Complex f -> (Double, Double, Double, Double) -> Bool -> C.Render ()
 renderPolygon sides radius origin (r,g,b,a) filled = do
     -- TODO: Refine 'wrap-around logic'
     let ((fx:+fy):rest) = take (sides + 1) . cycle $ polygon sides radius origin in C.moveTo fx fy >> forM_ rest (\(x:+y) -> C.lineTo x y)
@@ -253,7 +253,7 @@ renderCross w h = do
 
 -- |
 -- Ugh, I hate underscores so much
-renderCircleArc :: RealFloat f => Int -> Complex f -> f -> f -> f -> f -> C.Render ()
+renderCircleArc :: Floating f => Int -> Complex f -> f -> f -> f -> f -> C.Render ()
 renderCircleArc
     count    -- Number of small circles
     (ox:+oy) -- Centre of the 'arc' (pixels?)
@@ -263,7 +263,7 @@ renderCircleArc
     extent = forM_ [1..count] $ \ n -> do
         let n' = fromIntegral n
         let θ  = begin + n'*extent/fromIntegral count
-        C.arc (ox - spread*cos θ) (oy - spread*sin θ) radius 0 (toRealFrac τ)
+        C.arc (ox - spread*cos θ) (oy - spread*sin θ) radius 0 τ
         C.setSourceRGBA (0.5 * (1 + sin θ)) (0.1*n') (1/n') 0.95
         C.fill
 

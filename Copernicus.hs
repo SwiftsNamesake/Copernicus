@@ -45,8 +45,9 @@ import Graphics.Gloss.Geometry.Angle (degToRad, radToDeg, normaliseAngle)
 -- Types
 ---------------------------------------------------------------------------------------------------
 -- Make typeclass (mesh, body, bounding box, collision, etc) (?)
-type Vector = Complex Float -- TODO: Polymorphic (cf. related TODO item)
-data Body   = Body Vector Vector Vector deriving Show -- Add argument
+-- type Number a = Floating a -- Real number
+type Vector = Complex -- TODO: Polymorphic (cf. related TODO item)
+data Body f = Body (Vector f) (Vector f) (Vector f) deriving Show -- Add argument
 
 
 
@@ -60,13 +61,13 @@ clampAngle = radToDeg . normaliseAngle . degToRad
 
 --
 -- TODO: Make them change colour when bouncing (?)
-animate :: Float -> Body -> Body
+animate :: (RealFloat f, Floating f) => f -> Body f -> Body f
 animate t (Body p v a) = collide (30+30/2-540/2) $ Body (parabola t p v a) (v + (t:+0)*a) a
 
 
 
 --
-parabola :: Float -> Vector -> Vector -> Vector -> Vector
+parabola :: (RealFloat f, Floating f) => f -> Vector f -> Vector f -> Vector f -> Vector f
 parabola t p v a = let (px:+py) = p
                        (vx:+vy) = v
                        (ax:+ay) = a
@@ -77,7 +78,7 @@ parabola t p v a = let (px:+py) = p
 -- collide
 -- Very primitive for now
 -- TODO: Use 'contains' function (Range -> Value -> Bool)
-collide :: Float -> Body -> Body
+collide :: (RealFloat f, Floating f) => f -> Body f -> Body f
 collide gnd (Body (px:+py) (vx:+vy) a) = Body (px:+py) ((invertIf (\ _ -> (px <= 15-720/2) || ( px >= (720/2-30/2))) vx) :+ (invertIf (\ v -> (v < 0) && (py <= gnd)) vy)) a
 	where invertIf p v
 		| p v 		= -v
