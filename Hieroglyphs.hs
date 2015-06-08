@@ -50,7 +50,8 @@ data World = World { frame :: Int, size :: (Int, Int), bodies :: [Cop.Body] } de
 -- Data
 ---------------------------------------------------------------------------------------------------
 animate = True :: Bool   --
-π       = pi   :: Double -- TODO: Polymorphic (?)
+π       = pi   -- :: Double -- TODO: Polymorphic (?)
+τ       = 2*π  -- :: Double -- TODO: Polymorphic (?)
 fps     = 30   :: Int
 
 -- g = 0:+9.82 -- TODO: Negate
@@ -80,10 +81,15 @@ mainGTK = do
 
     widgetShowAll window
 
+    -- Assets
+    -- planets <- C.withImageSurfaceFromPNG "assets/planets.png" $ \surface -> surface
+
+    -- Animation
     (w,h)    <- widgetSize window
     worldVar <- newIORef $ World { frame=0, size=(w,h), bodies=bodies' } --
     when animate $ timeoutAdd (onanimate worldVar canvas) (1000 `div` fps) >> return ()
 
+    -- Events
     canvas `on` draw $ (C.liftIO $ readIORef worldVar) >>= render -- readIORef worldVar >>= \ w -> render (fromIntegral w) (fromIntegral h) w
     window `on` configureEvent $ onresize window worldVar
     window `on` deleteEvent $ C.liftIO mainQuit >> return False -- TODO: Uhmmm... what?
@@ -110,6 +116,7 @@ onresize window worldVar = do
 
 
 
+-- Animation --------------------------------------------------------------------------------------
 -- |
 onanimate :: IORef World -> DrawingArea -> IO Bool
 onanimate world canvas = do
@@ -126,10 +133,18 @@ update w@(World { frame=f, bodies=b } ) = w { frame=f+1, bodies=map (Cop.animate
 
 
 
+-- | The time elapsed (in seconds)
+-- TODO: Polymorphic (?)
+elapsed :: World -> Double
+elapsed world = (fromIntegral $ frame world) * 1.0/fromIntegral fps
+
+
+
+-- Rendering --------------------------------------------------------------------------------------
 -- |
 renderBody :: Cop.Body -> C.Render ()
 renderBody (Cop.Body (x:+y) v' g') = do
-    C.arc (realToFrac x/3 + 200) (realToFrac y/3 + 200) 12 0 (2*π)
+    C.arc (realToFrac x/3 + 200) (realToFrac y/3 + 200) 12 0 τ
     C.setSourceRGBA 0 0.2 0.3 1.0
     C.fill
 
@@ -144,27 +159,43 @@ renderWorld world = forM_ (bodies world) renderBody
 -- |
 render :: World -> C.Render ()
 render world = do
-    renderPolygon (frame world `div` fps) 42 (300:+300) False
+    renderGrid 10 10 $ fromIntegral (fst $ size world) / 10
+
+    C.moveTo 30 30
+    C.liftIO $ C.fontOptionsCreate >>= flip C.fontOptionsSetAntialias C.AntialiasSubpixel
+    C.selectFontFace "Helvetica" C.FontSlantNormal C.FontWeightNormal
+    C.setFontSize 30
+    C.setSourceRGBA 0.62 0.62 0.62 0.7
+    C.showText "Copernicus"
+    
+    let sides       = 3 + (flip mod 10 . flip div fps $ frame world)
+        radius mini = (+mini) . (*35.0) . (+1.0) . sin  $ elapsed world
+        origin      = (w/2):+(h/2)
+        fill        = False in do
+        renderPolygon sides (radius 10) origin (0,   0.5, 0,   1.0) fill
+        renderPolygon sides (radius 25) origin (0.3, 0.0, 0.8, 1.0) fill
+        renderPolygon sides (radius 40) origin (0.0, 0.7, 0.2, 1.0) fill
+
     renderWorld world
-    renderCircleArc 10 origin spread radius begin (2*π)
-    renderGrid 10 10 68
+    renderCircleArc 10 origin spread radius begin τ
     where count  = 10
           origin = (w/2):+(h/2) 
-          spread = 50 + 50 * (1 + sin (2.0*π * rpm * fromIntegral (frame world) * 1.0 / fromIntegral fps)) -- 134      -- Radius of the big circle (pixels?)
+          spread = 50 + 50 * (1 + sin (τ * rpm * elapsed world)) -- 134      -- Radius of the big circle (pixels?)
           radius = 20       -- Radius of a small circle (pixels?)
           (w,h)  = let (w', h') = size world in (fromIntegral w', fromIntegral h')
           rpm    = 0.3      --
-          begin  = 2.0*π * rpm * fromIntegral (frame world) * (1.0 / fromIntegral fps)
-          -- begin  = 2.0*π*(fromIntegral n / fromIntegral count) + 2.0*π * rpm * fromIntegral frm * (1.0 / fromIntegral fps) -- in
+          begin  = τ * rpm * elapsed world
 
 
 
+-- |
 renderGrid :: Int -> Int -> Double -> C.Render ()
 renderGrid cols rows size = do
-    sequence_ [ renderTile (fromIntegral cl) (fromIntegral rw) | cl <- [1..cols], rw <- [1..rows] ]
+    sequence_ [ tilePath cl rw >> C.fill   | cl <- [0..(cols-1)], rw <- [0..(rows-1)] ] -- Tiles
+    sequence_ [ tilePath cl rw >> C.stroke | cl <- [0..(cols-1)], rw <- [0..(rows-1)] ] -- Borders
+    -- TODO: Figure out how to use fill AND stroke
     where chooseColour cl rw = if (cl `mod` 2) == (rw `mod` 2) then 0.3 else 0.75 -- TODO: This should be a utility function
-          renderTile cl rw   = C.rectangle (cl*size) (rw*size) size size >> C.setSourceRGBA 0.22 0.81 (chooseColour (floor cl) (floor rw)) 0.32 >> C.fill
-
+          tilePath cl rw     = C.rectangle (fromIntegral cl*size) (fromIntegral rw*size) size size >> C.setSourceRGBA 0.22 0.81 (chooseColour cl rw) 0.32
 
 
 
@@ -172,25 +203,24 @@ renderGrid cols rows size = do
 -- TODO: Start angle
 -- TODO: Invalid arguments (eg. sides < 3) (use Maybe?)
 polygon :: RealFloat f => Int -> f -> Complex f -> [Complex f]
-polygon sides radius origin = [ let θ = fromIntegral n * 2*pi/fromIntegral sides in origin + ((radius * cos θ):+(radius * sin θ)) | n <- [1..sides]]
+polygon sides radius origin = [ let θ = arg n in origin + ((radius * cos θ):+(radius * sin θ)) | n <- [1..sides]]
+    where arg n = fromIntegral n * τ/fromIntegral sides
 
 
 
 -- | 
 -- TODO: Add arguments for colour, stroke, etc.
-renderPolygon :: Int -> Double -> Complex Double -> Bool -> C.Render ()
-renderPolygon sides radius origin filled = do
+renderPolygon :: RealFloat f => Int -> f -> Complex f -> (Double, Double, Double, Double) -> Bool -> C.Render ()
+renderPolygon sides radius origin (r,g,b,a) filled = do
     -- TODO: Refine 'wrap-around logic'
     let ((fx:+fy):rest) = take (sides + 1) . cycle $ polygon sides radius origin in C.moveTo fx fy >> forM_ rest (\(x:+y) -> C.lineTo x y)
-    -- let (sx:+sy) = origin+(realToFrac radius:+0) in C.moveTo (realToFrac sx) (realToFrac sy)
-    -- forM_ [1..sides] $ \n -> let θ        = fromIntegral n * π*2/fromIntegral sides
-                                 -- (vx:+vy) = origin+((realToFrac radius * cos θ) :+ (realToFrac radius * sin θ))
-                             -- in C.lineTo vx vy
-    C.setSourceRGBA 0 0 0 1.0
+    C.setSourceRGBA r g b a
+    C.setLineWidth 12
     if filled
         then C.fill
         else C.stroke
     -- when filled C.fill
+
 
 
 -- |
@@ -223,7 +253,7 @@ renderCross w h = do
 
 -- |
 -- Ugh, I hate underscores so much
-renderCircleArc :: Int -> Cop.Vector -> Double -> Double -> Double -> Double -> C.Render ()
+renderCircleArc :: RealFloat f => Int -> Complex f -> f -> f -> f -> f -> C.Render ()
 renderCircleArc
     count    -- Number of small circles
     (ox:+oy) -- Centre of the 'arc' (pixels?)
@@ -233,7 +263,7 @@ renderCircleArc
     extent = forM_ [1..count] $ \ n -> do
         let n' = fromIntegral n
         let θ  = begin + n'*extent/fromIntegral count
-        C.arc (realToFrac ox - spread*cos θ) (realToFrac oy - spread*sin θ) radius 0 (2*π)
+        C.arc (ox - spread*cos θ) (oy - spread*sin θ) radius 0 (toRealFrac τ)
         C.setSourceRGBA (0.5 * (1 + sin θ)) (0.1*n') (1/n') 0.95
         C.fill
 
