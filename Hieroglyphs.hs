@@ -13,7 +13,8 @@
 
 -- TODO | - Lenses
 --        - Performance profiling (feels chuggish)
-
+--        - Figure out how to deal with polymorphic numerical types
+--        - Polymorphic wrappers around core rendering functions
 
 -- SPEC | -
 --        -
@@ -32,7 +33,6 @@ import qualified Graphics.Rendering.Cairo as C
 
 import Data.Complex
 import Control.Monad (when, forM_)
--- import Control.Concurrent.MVar
 import Data.IORef
 
 import qualified Copernicus as Cop
@@ -42,7 +42,7 @@ import qualified Copernicus as Cop
 ---------------------------------------------------------------------------------------------------
 -- Types
 ---------------------------------------------------------------------------------------------------
-data World = World { frame :: Int, size :: (Int, Int), bodies :: [Cop.Body] } deriving Show
+data World = World { frame :: Int, size :: (Int, Int), bodies :: [Cop.Body Double] } deriving Show
 
 
 
@@ -56,10 +56,10 @@ fps     = 30   :: Int
 
 -- g = 0:+9.82 -- TODO: Negate
 -- v = 18:+5   -- TODO:
-v = 40.0:+20.0 --40.0 :+ 20.0
-g = 0.0:+(-98.2) --0.0 :+ (-9.82)
+v = 2.0:+0.5 --40.0 :+ 20.0
+g = 0.0:+(-9.82) --0.0 :+ (-9.82)
 
-bodies' = map (\ (p', v', g') -> Cop.Body p' v' g') [(0.0:+0.0, v, g), (10.0:+0.0, (-20.0):+15.0, g), (35.0:+(-28.0), v, g), (20.5:+19.2, v, g)]
+bodies' = map (\ (p', v', g') -> Cop.Body p' v' g') [(0.0:+1.0, v, g), (1.0:+0.0, (2.0):+1.50, g), (3.0:+(2.80), v, g), (2.5:+1.92, v, g)]
 
 
 
@@ -93,12 +93,14 @@ mainGTK = do
     canvas `on` draw $ (C.liftIO $ readIORef worldVar) >>= render -- readIORef worldVar >>= \ w -> render (fromIntegral w) (fromIntegral h) w
     window `on` configureEvent $ onresize window worldVar
     window `on` deleteEvent $ C.liftIO mainQuit >> return False -- TODO: Uhmmm... what?
+    window `on` keyPressEvent $ return True
 
     mainGUI
 
 
 
 -- |
+-- TODO: Make polymorphic
 widgetSize :: WidgetClass self => self -> IO (Int, Int)
 widgetSize widget = do
     w <- widgetGetAllocatedWidth widget
@@ -142,9 +144,12 @@ elapsed world = (fromIntegral $ frame world) * 1.0/fromIntegral fps
 
 -- Rendering --------------------------------------------------------------------------------------
 -- |
-renderBody :: Cop.Body -> C.Render ()
-renderBody (Cop.Body (x:+y) v' g') = do
-    C.arc (x/3 + 200) (y/3 + 200) 12 0 τ
+-- TODO: Make polymorphic
+-- TODO: Apply coordinate transformations (to World perhaps; make world a monad?)
+renderBody :: Cop.Body Double -> C.Render ()
+renderBody (Cop.Body (x:+y) v' a') = do
+    -- C.arc (x/3 + 200) (y/3 + 200) 12 0 τ
+    C.arc x y 12 0 τ
     C.setSourceRGBA 0 0.2 0.3 1.0
     C.fill
 
@@ -152,30 +157,54 @@ renderBody (Cop.Body (x:+y) v' g') = do
 
 -- |
 renderWorld :: World -> C.Render ()
-renderWorld world = forM_ (bodies world) renderBody
+renderWorld world = do
+
+    -- X-axis
+    vectorise C.moveTo $ toScreenCoords ((-3):+0)
+    vectorise C.lineTo $ toScreenCoords (  3:+0)
+    C.setSourceRGBA 1 0 0 0.8
+    C.stroke
+
+    -- Y-axis
+    vectorise C.moveTo $ toScreenCoords (0:+(-3))
+    vectorise C.lineTo $ toScreenCoords (0:+  3)
+    C.setSourceRGBA 0 1 0 0.8
+    C.stroke
+
+    -- Render bodies
+    forM_ (bodies world) $ renderBody . bodyToScreenCoords
+    where (w, h) = let (w', h') = size world in (fromIntegral w', fromIntegral h')
+          (sx:+sy) = (w/10):+(-h/10)
+          toScreenCoords = transform (sx:+sy) (w/(2*sx):+h/(2*sy))
+          bodyToScreenCoords (Cop.Body p v' a') = Cop.Body (toScreenCoords p) v' a' -- TODO: Make transformation less ad-hoc
+
 
 
 
 -- |
 render :: World -> C.Render ()
 render world = do
-    renderGrid 10 10 $ fromIntegral (fst $ size world) / 10
-
-    C.moveTo 30 30
+    --
+    C.moveTo 16 44
     C.liftIO $ C.fontOptionsCreate >>= flip C.fontOptionsSetAntialias C.AntialiasSubpixel
     C.selectFontFace "Helvetica" C.FontSlantNormal C.FontWeightNormal
     C.setFontSize 30
     C.setSourceRGBA 0.62 0.62 0.62 0.7
     C.showText "Copernicus"
-    
+
+    --
+    renderGrid 10 10 $ fromIntegral (fst $ size world) / 10
+
+    --
     let sides       = 3 + (flip mod 10 . flip div fps $ frame world)
         radius mini = (+mini) . (*35.0) . (+1.0) . sin  $ elapsed world
         origin      = (w/2):+(h/2)
-        fill        = False in do
-        renderPolygon sides (radius 10) origin (0,   0.5, 0,   1.0) fill
-        renderPolygon sides (radius 25) origin (0.3, 0.0, 0.8, 1.0) fill
-        renderPolygon sides (radius 40) origin (0.0, 0.7, 0.2, 1.0) fill
+        fill        = False in forM_ [(10, (0.0, 0.5, 0, 1.0)),
+                                      (30, (0.3, 0.0, 0.8, 1.0)),
+                                      (50, (0.0, 0.7, 0.2, 1.0)),
+                                      (70, (0.8, 0.8, 0.1, 1.0))] $ \(mini, colour) -> renderPolygon sides (radius mini) origin colour fill
 
+    -- 
     renderWorld world
     renderCircleArc 10 origin spread radius begin τ
     where count  = 10
@@ -200,26 +229,33 @@ renderGrid cols rows size = do
 
 
 -- |
--- TODO: Start angle
--- TODO: Invalid arguments (eg. sides < 3) (use Maybe?)
-polygon :: Floating f => Int -> f -> Complex f -> [Complex f]
-polygon sides radius origin = [ let θ = arg n in origin + ((radius * cos θ):+(radius * sin θ)) | n <- [1..sides]]
-    where arg n = (fromIntegral n * (2*π)/fromIntegral sides :: f)
+renderArrow :: Complex Double -> Complex Double -> Double -> Double -> Double -> C.Render ()
+renderArrow from to hl sw hw = do
+    let (first:rest) = closePath $ arrow from to hl sw hw
+    vectorise C.moveTo first
+    forM_ rest $ vectorise C.lineTo
+
+    C.setSourceRGBA 1 0.8 0.15 1.0
+    C.setLineWidth 8
+    C.stroke
 
 
 
 -- | 
 -- TODO: Add arguments for colour, stroke, etc.
-renderPolygon :: Floating f => Int -> f -> Complex f -> (Double, Double, Double, Double) -> Bool -> C.Render ()
+-- TODO: Make polymorphic
+renderPolygon :: Int -> Double -> Complex Double -> (Double, Double, Double, Double) -> Bool -> C.Render ()
 renderPolygon sides radius origin (r,g,b,a) filled = do
     -- TODO: Refine 'wrap-around logic'
-    let ((fx:+fy):rest) = take (sides + 1) . cycle $ polygon sides radius origin in C.moveTo fx fy >> forM_ rest (\(x:+y) -> C.lineTo x y)
+    C.moveTo fx fy
+    forM_ rest $ \(x:+y) -> C.lineTo x y
+    
     C.setSourceRGBA r g b a
     C.setLineWidth 12
     if filled
         then C.fill
         else C.stroke
-    -- when filled C.fill
+    where ((fx:+fy):rest) = polygon sides radius origin ++ [fx:+fy]
 
 
 
@@ -253,7 +289,8 @@ renderCross w h = do
 
 -- |
 -- Ugh, I hate underscores so much
-renderCircleArc :: Floating f => Int -> Complex f -> f -> f -> f -> f -> C.Render ()
+-- TODO: Make polymorphic
+renderCircleArc :: Int -> Complex Double -> Double -> Double -> Double -> Double -> C.Render ()
 renderCircleArc
     count    -- Number of small circles
     (ox:+oy) -- Centre of the 'arc' (pixels?)
@@ -266,6 +303,58 @@ renderCircleArc
         C.arc (ox - spread*cos θ) (oy - spread*sin θ) radius 0 τ
         C.setSourceRGBA (0.5 * (1 + sin θ)) (0.1*n') (1/n') 0.95
         C.fill
+
+
+
+-- Geometry ---------------------------------------------------------------------------------------
+-- |
+-- TODO: Start angle
+-- TODO: Invalid arguments (eg. sides < 3) (use Maybe?)
+-- TODO: Make polymorphic
+-- TODO: Move to geometry section
+-- polygon :: (Floating f, RealFloat f) => Int -> f -> Complex f -> [Complex f]
+polygon :: Int -> Double -> Complex Double -> [Complex Double] 
+polygon sides radius origin = [ let θ = arg n in origin + ((radius * cos θ):+(radius * sin θ)) | n <- [1..sides]]
+    where arg n = fromIntegral n * (2*π)/fromIntegral sides
+
+
+
+-- |
+-- TODO: Simplify
+arrow :: Complex Double -> Complex Double -> Double -> Double -> Double -> [Complex Double]
+arrow from to sl sw hw = []
+    where along a b distance = let (_, arg) = polar (b-a) in a + (mkPolar distance . fst . polar $ b-a) -- Walk distance along the from a to b
+          normal a b = let (mag, arg) = polar (b-a) in mkPolar mag (arg+π/2)
+          shaftEnd = along from to sl --
+          straight = along (0:+0) (normal a b) -- Vector perpendicular to the centre line
+          -- shaftWidth = along (0:+0) (normal a b) (sw/2) -- Half of shaft width (vector relative to symmetry line)
+          -- headWidth  = along (0:+0) (normal a b) (hw/2)
+
+
+
+
+-- Utilities --------------------------------------------------------------------------------------
+-- |
+vectorise :: (Double -> Double -> a) -> Complex Double -> a
+vectorise f (re:+im) = f re im
+
+
+
+-- | 
+-- TODO: Unsafe, use Maybe (?)
+closePath :: [Complex Double] -> [Complex Double]
+closePath path = path ++ [head path] 
+
+
+
+-- Transforms a vector from one coordinate space to another
+-- by applying the given scaling and translation
+-- Useful for converting between simulation and screen coordinates
+-- TODO: Types for representing coordinate systems
+transform :: Complex Double -> Complex Double -> Complex Double -> Complex Double
+transform scaling translation = scale scaling . translate translation
+    where scale (sx:+sy) (x:+y) = (sx*x):+(sy*y) 
+          translate             = (+)
 
 
 

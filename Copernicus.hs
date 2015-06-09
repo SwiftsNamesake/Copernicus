@@ -62,8 +62,8 @@ clampAngle = radToDeg . normaliseAngle . degToRad
 --
 -- TODO: Make them change colour when bouncing (?)
 animate :: (RealFloat f, Floating f) => f -> Body f -> Body f
-animate t (Body p v a) = collide (30+30/2-540/2) $ Body (parabola t p v a) (v + (t:+0)*a) a
-
+animate t (Body p v a) = collide ground $ Body (parabola t p v a) (v + (t:+0)*a) a
+	where ground = 0.0 -- 30+30/2-540/2 (previous hard-coded value)
 
 
 --
@@ -78,11 +78,13 @@ parabola t p v a = let (px:+py) = p
 -- collide
 -- Very primitive for now
 -- TODO: Use 'contains' function (Range -> Value -> Bool)
+-- TODO: Don't hard-code bounds (left, right)
+-- TODO: Take bounds of Body into account (don't hard-code that either)
 collide :: (RealFloat f, Floating f) => f -> Body f -> Body f
-collide gnd (Body (px:+py) (vx:+vy) a) = Body (px:+py) ((invertIf (\ _ -> (px <= 15-720/2) || ( px >= (720/2-30/2))) vx) :+ (invertIf (\ v -> (v < 0) && (py <= gnd)) vy)) a
-	where invertIf p v
-		| p v 		= -v
-		| otherwise =  v
+collide gnd (Body (px:+py) (vx:+vy) a) = Body (px:+py) ((invertIf (\ _ -> (px <= left) || ( px >= right)) vx) :+ (invertIf (\ v -> (v < 0) && (py <= gnd)) vy)) a
+	where invertIf p v | p v 	   = -v
+	                   | otherwise =  v
+	      (left, right) = (-5, 5) --(15-720/2, 720/2-30/2)
 
 
 

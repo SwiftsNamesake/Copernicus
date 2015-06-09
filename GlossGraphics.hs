@@ -41,7 +41,7 @@ import Copernicus
 ---------------------------------------------------------------------------------------------------
 -- Types
 ---------------------------------------------------------------------------------------------------
-data World = World { bodies :: [Body],
+data World = World { bodies :: [Body Float],
                      grid   :: Bool
                    }
 
@@ -104,5 +104,5 @@ renderGrid dx dy w' h' = pictures $ rows ++ cols
 -- by applying the given scaling and translation
 -- Useful for converting between simulation and screen coordinates
 -- TODO: Make pure (eg. use for pure coordinates so it doesn't depend on Gloss) (?)
-transform :: Vector -> Vector -> Picture -> Picture
+transform :: Vector Float -> Vector Float -> Picture -> Picture
 transform (sx:+sy) (dx:+dy) = scale sx sy . translate dx dy
