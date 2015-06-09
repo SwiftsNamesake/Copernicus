@@ -160,24 +160,19 @@ renderWorld :: World -> C.Render ()
 renderWorld world = do
 
     -- X-axis
-    vectorise C.moveTo $ toScreenCoords ((-3):+0)
-    vectorise C.lineTo $ toScreenCoords (  3:+0)
+    vectorise C.moveTo $ toScreenCoords world ((-3):+0)
+    vectorise C.lineTo $ toScreenCoords world (  3:+0)
     C.setSourceRGBA 1 0 0 0.8
     C.stroke
 
     -- Y-axis
-    vectorise C.moveTo $ toScreenCoords (0:+(-3))
-    vectorise C.lineTo $ toScreenCoords (0:+  3)
+    vectorise C.moveTo $ toScreenCoords world (0:+(-3))
+    vectorise C.lineTo $ toScreenCoords world (0:+  3)
     C.setSourceRGBA 0 1 0 0.8
     C.stroke
 
     -- Render bodies
-    forM_ (bodies world) $ renderBody . bodyToScreenCoords
-    where (w, h) = let (w', h') = size world in (fromIntegral w', fromIntegral h')
-          (sx:+sy) = (w/10):+(-h/10)
-          toScreenCoords = transform (sx:+sy) (w/(2*sx):+h/(2*sy))
-          bodyToScreenCoords (Cop.Body p v' a') = Cop.Body (toScreenCoords p) v' a' -- TODO: Make transformation less ad-hoc
-
+    forM_ (bodies world) $ renderBody . bodyToScreenCoords world
 
 
 
@@ -192,33 +187,38 @@ render world = do
     C.setSourceRGBA 0.62 0.62 0.62 0.7
     C.showText "Copernicus"
 
+    extents <- C.textExtents "Copernicus"
+
+    C.setFontSize 14
+    C.setSourceRGBA 0.3 0.3 0.3 1.0
+    C.moveTo 16 $ 44 + C.textExtentsHeight extents + 5
+    C.showText "Jonatan H Sundqvist 2015"
+
     --
     renderGrid 10 10 $ fromIntegral (fst $ size world) / 10
 
-    --
+    -- Arrow
     -- renderArrow (40:+40) (200:+120) 80 20 40
     -- TODO: Don't hard-code arrow values
-    let thearrow = arrow (40:+50) (360:+450) 400 40 88
-    renderArrow          (40:+50) (360:+450) 400 40 88
+    forM_ (bodies world) $ \ body -> do
+        let (from, to, len, width, headWidth) = (40:+50, let (Cop.Body p _ _) = body in toScreenCoords world p, 0.78 * magnitude (to-from), 40, 88)
+        let thearrow = arrow from to len width headWidth
+        renderArrow          from to len width headWidth
 
-    -- Arrow vertices
-    C.setSourceRGBA 0 0 0 1.0
-    forM_ thearrow (flip renderCircle 5)
+        -- Arrow vertices
+        C.setSourceRGBA 0 0 0 1.0
+        forM_ thearrow (flip renderCircle 5)
 
-    -- C.setSourceRGBA 0 1 0 1.0
-    -- renderPath thearrow
+        C.setSourceRGBA 0 0 0 1.0
+        forM_ (zip [1..] thearrow) $ \(n, p) -> vectorise C.moveTo (p+(6:+6)) >> C.showText (show n)
 
-    C.setSourceRGBA 0 0 0 1.0
-    forM_ (zip [1..] thearrow) $ \(n, p) -> vectorise C.moveTo (p+(6:+6)) >> C.showText (show n)
+        -- Arrow symmetry line
+        vectorise C.moveTo from
+        vectorise C.lineTo to
+        C.setSourceRGBA 0 0 0 1.0
+        C.stroke
 
-    -- Arrow symmetry line
-    C.moveTo 40 50
-    C.lineTo 360 450
-
-    C.setSourceRGBA 0 0 0 1.0
-    C.stroke
-
-    --
+    -- Shifting polygons
     let sides       = 3 + (flip mod 10 . flip div fps $ frame world)
         radius mini = (+mini) . (*35.0) . (+1.0) . sin  $ elapsed world
         origin      = (w/2):+(h/2)
@@ -227,8 +227,10 @@ render world = do
                                       (50, (0.0, 0.7, 0.2, 1.0)),
                                       (70, (0.8, 0.8, 0.1, 1.0))] $ \(mini, colour) -> renderPolygon sides (radius mini) origin colour fill
 
-    -- 
+    --  Bouncing balls
     renderWorld world
+
+    -- Circle carousel
     renderCircleArc 10 origin spread radius begin τ
     where count  = 10
           origin = (w/2):+(h/2) 
@@ -403,6 +405,20 @@ transform :: Complex Double -> Complex Double -> Complex Double -> Complex Doubl
 transform scaling translation = scale scaling . translate translation
     where scale (sx:+sy) (x:+y) = (sx*x):+(sy*y) 
           translate             = (+)
+
+
+
+-- |
+toScreenCoords :: World -> Complex Double -> Complex Double
+toScreenCoords world = transform (sx:+sy) (w/(2*sx):+h/(2*sy))
+    where (w, h) = let (w', h') = size world in (fromIntegral w', fromIntegral h')
+          (sx:+sy) = (w/10):+(-h/10)
+
+
+
+-- |
+bodyToScreenCoords :: World -> Cop.Body Double -> Cop.Body Double
+bodyToScreenCoords world (Cop.Body p v' a') = Cop.Body (toScreenCoords world p) v' a' -- TODO: Make transformation less ad-hoc
 
 
 
