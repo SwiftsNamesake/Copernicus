@@ -196,6 +196,29 @@ render world = do
     renderGrid 10 10 $ fromIntegral (fst $ size world) / 10
 
     --
+    -- renderArrow (40:+40) (200:+120) 80 20 40
+    -- TODO: Don't hard-code arrow values
+    let thearrow = arrow (40:+50) (360:+450) 400 40 88
+    renderArrow          (40:+50) (360:+450) 400 40 88
+
+    -- Arrow vertices
+    C.setSourceRGBA 0 0 0 1.0
+    forM_ thearrow (flip renderCircle 5)
+
+    -- C.setSourceRGBA 0 1 0 1.0
+    -- renderPath thearrow
+
+    C.setSourceRGBA 0 0 0 1.0
+    forM_ (zip [1..] thearrow) $ \(n, p) -> vectorise C.moveTo (p+(6:+6)) >> C.showText (show n)
+
+    -- Arrow symmetry line
+    C.moveTo 40 50
+    C.lineTo 360 450
+
+    C.setSourceRGBA 0 0 0 1.0
+    C.stroke
+
+    --
     let sides       = 3 + (flip mod 10 . flip div fps $ frame world)
         radius mini = (+mini) . (*35.0) . (+1.0) . sin  $ elapsed world
         origin      = (w/2):+(h/2)
@@ -230,13 +253,13 @@ renderGrid cols rows size = do
 
 -- |
 renderArrow :: Complex Double -> Complex Double -> Double -> Double -> Double -> C.Render ()
-renderArrow from to hl sw hw = do
-    let (first:rest) = closePath $ arrow from to hl sw hw
+renderArrow from to sl sw hw = do
+    let (first:rest) = closePath $ arrow from to sl sw hw
     vectorise C.moveTo first
     forM_ rest $ vectorise C.lineTo
 
     C.setSourceRGBA 1 0.8 0.15 1.0
-    C.setLineWidth 8
+    C.setLineWidth 3
     C.stroke
 
 
@@ -287,6 +310,25 @@ renderCross w h = do
 
 
 
+-- | 
+-- TODO: Options for fill/stroke, colour, width, etc.
+renderCircle :: Complex Double -> Double -> C.Render ()
+renderCircle (cx:+cy) radius = do
+    C.arc cx cy radius 0 τ
+    C.fill
+
+
+
+-- |
+-- TODO: Options for colour, width, closed/open, etc.
+renderPath :: [Complex Double] -> C.Render ()
+renderPath (p:ath) = do
+    vectorise C.moveTo p
+    forM_ ath $ vectorise C.lineTo
+    C.stroke
+
+
+
 -- |
 -- Ugh, I hate underscores so much
 -- TODO: Make polymorphic
@@ -320,13 +362,19 @@ polygon sides radius origin = [ let θ = arg n in origin + ((radius * cos θ):+(
 
 
 -- |
--- TODO: Simplify
+-- TODO: Simplify and expound comments
 arrow :: Complex Double -> Complex Double -> Double -> Double -> Double -> [Complex Double]
-arrow from to sl sw hw = []
-    where along a b distance = let (_, arg) = polar (b-a) in a + (mkPolar distance . fst . polar $ b-a) -- Walk distance along the from a to b
+arrow from to sl sw hw = [from     + straight (sw/2), --
+                          shaftEnd + straight (sw/2), --
+                          shaftEnd + straight (hw/2), --
+                          to,                         --
+                          shaftEnd - straight (hw/2), --
+                          shaftEnd - straight (sw/2), --
+                          from     - straight (sw/2)]  --
+    where along a b distance = a + (mkPolar distance . snd . polar $ b-a) -- Walk distance along the from a to b
           normal a b = let (mag, arg) = polar (b-a) in mkPolar mag (arg+π/2)
           shaftEnd = along from to sl --
-          straight = along (0:+0) (normal a b) -- Vector perpendicular to the centre line
+          straight = along (0:+0) (normal from to) -- Vector perpendicular to the centre line
           -- shaftWidth = along (0:+0) (normal a b) (sw/2) -- Half of shaft width (vector relative to symmetry line)
           -- headWidth  = along (0:+0) (normal a b) (hw/2)
 
