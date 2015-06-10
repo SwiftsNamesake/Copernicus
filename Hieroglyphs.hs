@@ -15,6 +15,9 @@
 --        - Performance profiling (feels chuggish)
 --        - Figure out how to deal with polymorphic numerical types
 --        - Polymorphic wrappers around core rendering functions
+--        - This module should only deal with graphics
+--        - Work out how to deal with state (logical/interaction/graphical)
+--        - Wrap up graphical/animation state in single object (eg. Renderable ball with trail/colour/arrows/etc.)
 
 -- SPEC | -
 --        -
@@ -32,7 +35,7 @@ import Graphics.UI.Gtk -- hiding (fill)
 import qualified Graphics.Rendering.Cairo as C
 
 import Data.Complex
-import Control.Monad (when, forM_)
+import Control.Monad (when, forM_, liftM)
 import Data.IORef
 
 import qualified Copernicus as Cop
@@ -42,7 +45,8 @@ import qualified Copernicus as Cop
 ---------------------------------------------------------------------------------------------------
 -- Types
 ---------------------------------------------------------------------------------------------------
-data World = World { frame :: Int, size :: (Int, Int), bodies :: [Cop.Body Double] } deriving Show
+-- TODO: One trail per body ([[Complex Double]]) (?)
+data World = World { frame :: Int, size :: (Int, Int), bodies :: [Cop.Body Double], trails :: [Complex Double] } deriving Show
 
 
 
@@ -83,17 +87,20 @@ mainGTK = do
 
     -- Assets
     -- planets <- C.withImageSurfaceFromPNG "assets/planets.png" $ \surface -> surface
+    planets <- C.liftIO $ C.imageSurfaceCreateFromPNG "assets/planets.png"
 
     -- Animation
     (w,h)    <- widgetSize window
-    worldVar <- newIORef $ World { frame=0, size=(w,h), bodies=bodies' } --
+    worldVar <- newIORef $ World { frame=0, size=(w,h), bodies=bodies', trails=[] } --
     when animate $ timeoutAdd (onanimate worldVar canvas) (1000 `div` fps) >> return ()
 
+
     -- Events
-    canvas `on` draw $ (C.liftIO $ readIORef worldVar) >>= render -- readIORef worldVar >>= \ w -> render (fromIntegral w) (fromIntegral h) w
+    canvas `on` draw $ (C.liftIO $ readIORef worldVar) >>= flip render planets -- readIORef worldVar >>= \ w -> render (fromIntegral w) (fromIntegral h) w
     window `on` configureEvent $ onresize window worldVar
     window `on` deleteEvent $ C.liftIO mainQuit >> return False -- TODO: Uhmmm... what?
-    window `on` keyPressEvent $ return True
+    window `on` keyPressEvent $ onkeypress
+    -- window `on` pointerMovesEvent $ onmousemove
 
     mainGUI
 
@@ -118,6 +125,24 @@ onresize window worldVar = do
 
 
 
+-- |
+-- onkeypress :: 
+onkeypress = do
+    key <- eventKeyName
+    C.liftIO $ print key
+    return True
+
+
+
+-- |
+-- onmousemove :: 
+onmousemove = do
+    key <- eventKeyName
+    C.liftIO $ print key
+    return True
+
+
+
 -- Animation --------------------------------------------------------------------------------------
 -- |
 onanimate :: IORef World -> DrawingArea -> IO Bool
@@ -130,8 +155,11 @@ onanimate world canvas = do
 
 
 -- |
+-- TODO: Refactor, make readable (State monad, lenses)
 update :: World -> World
-update w@(World { frame=f, bodies=b } ) = w { frame=f+1, bodies=map (Cop.animate (1.0/fromIntegral fps)) b }
+update w@(World { frame=f, bodies=(b@(Cop.Body p _ _):odies) } ) = w { frame=f+1,
+                                                                       bodies=map (Cop.animate (1.0/fromIntegral fps)) (b:odies),
+                                                                       trails=take 50 $ p:trails w }
 
 
 
@@ -160,25 +188,27 @@ renderWorld :: World -> C.Render ()
 renderWorld world = do
 
     -- X-axis
-    vectorise C.moveTo $ toScreenCoords world ((-3):+0)
-    vectorise C.lineTo $ toScreenCoords world (  3:+0)
+    vectorise C.moveTo $ toScreenCoords world ((-5):+0)
+    vectorise C.lineTo $ toScreenCoords world (  5:+0)
     C.setSourceRGBA 1 0 0 0.8
     C.stroke
 
     -- Y-axis
-    vectorise C.moveTo $ toScreenCoords world (0:+(-3))
-    vectorise C.lineTo $ toScreenCoords world (0:+  3)
+    vectorise C.moveTo $ toScreenCoords world (0:+(-5))
+    vectorise C.lineTo $ toScreenCoords world (0:+  5)
     C.setSourceRGBA 0 1 0 0.8
     C.stroke
 
+    -- Trail(s)
+    forM_ (trails world) $ flip renderCircle 3 . toScreenCoords world
     -- Render bodies
     forM_ (bodies world) $ renderBody . bodyToScreenCoords world
 
 
 
 -- |
-render :: World -> C.Render ()
-render world = do
+render :: World -> C.Surface -> C.Render ()
+render world planets = do
     --
     C.moveTo 16 44
     C.liftIO $ C.fontOptionsCreate >>= flip C.fontOptionsSetAntialias C.AntialiasSubpixel
@@ -197,13 +227,23 @@ render world = do
     --
     renderGrid 10 10 $ fromIntegral (fst $ size world) / 10
 
+    --
+    {-action <- C.liftIO . C.withImageSurfaceFromPNG "assets/planets.png" $ (\surface -> return $ 
+        do C.setSourceSurface surface 20 20 >> C.paint)-}
+    -- planets <- C.liftIO $ C.imageSurfaceCreateFromPNG "assets/planets.png"
+    C.setSourceSurface planets 50 50
+    C.rectangle 320 310 250 250
+    C.clip
+    C.paint
+    C.resetClip
+
     -- Arrow
     -- renderArrow (40:+40) (200:+120) 80 20 40
     -- TODO: Don't hard-code arrow values
     forM_ (bodies world) $ \ body -> do
         let (from, to, len, width, headWidth) = (40:+50, let (Cop.Body p _ _) = body in toScreenCoords world p, 0.78 * magnitude (to-from), 40, 88)
         let thearrow = arrow from to len width headWidth
-        renderArrow          from to len width headWidth
+        renderArrow from to len width headWidth
 
         -- Arrow vertices
         C.setSourceRGBA 0 0 0 1.0
@@ -401,18 +441,43 @@ closePath path = path ++ [head path]
 -- by applying the given scaling and translation
 -- Useful for converting between simulation and screen coordinates
 -- TODO: Types for representing coordinate systems
+-- TODO: Use matrix instead (scale and translate should be applied in reverse order when undoing the transformation)
+-- TODO: Add undo parameter (?)
+-- TODO: Pure function, move to Copernicus.hs or use Cairo matrix functions
 transform :: Complex Double -> Complex Double -> Complex Double -> Complex Double
 transform scaling translation = scale scaling . translate translation
-    where scale (sx:+sy) (x:+y) = (sx*x):+(sy*y) 
-          translate             = (+)
+
+
+
+-- |
+scale :: Complex Double -> Complex Double -> Complex Double
+scale (sx:+sy) (x:+y) = (sx*x):+(sy*y) 
+
+
+
+-- |
+translate :: Complex Double -> Complex Double -> Complex Double
+translate = (+)
 
 
 
 -- |
 toScreenCoords :: World -> Complex Double -> Complex Double
-toScreenCoords world = transform (sx:+sy) (w/(2*sx):+h/(2*sy))
+toScreenCoords world = transform (sx:+sy) translation
+    where (w, h)   = let (w', h') = size world in (fromIntegral w', fromIntegral h')
+          (sx:+sy)    = (w/10):+(-h/10)
+          translation = w/(2*sx):+h/(2*sy)
+
+
+
+-- | TODO: Implement :/
+-- TODO: Dotwise application for Complex numbers
+-- TODO: Don't hard-code the world-size of the canvas (currently 10-by-10)
+toWorldCoords :: World -> Complex Double -> Complex Double
+toWorldCoords world = translate (-translation) . scale (sx**(-1):+sy**(-1))
     where (w, h) = let (w', h') = size world in (fromIntegral w', fromIntegral h')
-          (sx:+sy) = (w/10):+(-h/10)
+          (sx:+sy)    = (w/10):+(-h/10)
+          translation = (w/(2*sx)):+(h/(2*sy))
 
 
 
