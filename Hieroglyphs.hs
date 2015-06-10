@@ -12,12 +12,20 @@
 --
 
 -- TODO | - Lenses
---        - Performance profiling (feels chuggish)
+--        - Performance profiling (feels chuggish sometimes, consumes a lot of CPU power)
 --        - Figure out how to deal with polymorphic numerical types
 --        - Polymorphic wrappers around core rendering functions
 --        - This module should only deal with graphics
 --        - Work out how to deal with state (logical/interaction/graphical)
 --        - Wrap up graphical/animation state in single object (eg. Renderable ball with trail/colour/arrows/etc.)
+--          -- Toggle visibility (eg. with checkbuttons)
+--          -- Drawing bounding boxes, vector arrows
+--          -- Create Drawable type
+--
+--        - Effects
+--          -- Fading
+--
+--        - Worry about clean-up or rely on GC (eg. freeing surfaces) (?)
 
 -- SPEC | -
 --        -
@@ -35,7 +43,7 @@ import Graphics.UI.Gtk -- hiding (fill)
 import qualified Graphics.Rendering.Cairo as C
 
 import Data.Complex
-import Control.Monad (when, forM_, liftM)
+import Control.Monad (when, forM_)
 import Data.IORef
 
 import qualified Copernicus as Cop
@@ -53,13 +61,11 @@ data World = World { frame :: Int, size :: (Int, Int), bodies :: [Cop.Body Doubl
 ---------------------------------------------------------------------------------------------------
 -- Data
 ---------------------------------------------------------------------------------------------------
-animate = True :: Bool   --
+animate = True --
 π       = pi   -- :: Double -- TODO: Polymorphic (?)
 τ       = 2*π  -- :: Double -- TODO: Polymorphic (?)
 fps     = 30   :: Int
 
--- g = 0:+9.82 -- TODO: Negate
--- v = 18:+5   -- TODO:
 v = 2.0:+0.5 --40.0 :+ 20.0
 g = 0.0:+(-9.82) --0.0 :+ (-9.82)
 
@@ -80,8 +86,10 @@ mainGTK = do
     canvas <- drawingAreaNew
     containerAdd frame canvas
 
-    set window [ containerChild := frame ]
+    set window [ containerChild := frame]
     windowSetDefaultSize window 650 650
+
+    widgetAddEvents canvas [PointerMotionMask]
 
     widgetShowAll window
 
@@ -97,10 +105,11 @@ mainGTK = do
 
     -- Events
     canvas `on` draw $ (C.liftIO $ readIORef worldVar) >>= flip render planets -- readIORef worldVar >>= \ w -> render (fromIntegral w) (fromIntegral h) w
+    canvas `on` motionNotifyEvent $ onmousemove
+
     window `on` configureEvent $ onresize window worldVar
     window `on` deleteEvent $ C.liftIO mainQuit >> return False -- TODO: Uhmmm... what?
     window `on` keyPressEvent $ onkeypress
-    -- window `on` pointerMovesEvent $ onmousemove
 
     mainGUI
 
@@ -137,9 +146,10 @@ onkeypress = do
 -- |
 -- onmousemove :: 
 onmousemove = do
-    key <- eventKeyName
-    C.liftIO $ print key
-    return True
+    when False $ do
+        (mx,my) <- eventCoordinates
+        C.liftIO $ print (mx,my)
+    return False
 
 
 
@@ -209,33 +219,36 @@ renderWorld world = do
 -- |
 render :: World -> C.Surface -> C.Render ()
 render world planets = do
+
     --
-    C.moveTo 16 44
-    C.liftIO $ C.fontOptionsCreate >>= flip C.fontOptionsSetAntialias C.AntialiasSubpixel
-    C.selectFontFace "Helvetica" C.FontSlantNormal C.FontWeightNormal
-    C.setFontSize 30
-    C.setSourceRGBA 0.62 0.62 0.62 0.7
-    C.showText "Copernicus"
+    when False do 
+        C.moveTo 16 44
+        C.liftIO $ C.fontOptionsCreate >>= flip C.fontOptionsSetAntialias C.AntialiasSubpixel
+        C.selectFontFace "Helvetica" C.FontSlantNormal C.FontWeightNormal
+        C.setFontSize 30
+        C.setSourceRGBA 0.62 0.62 0.62 0.7
+        C.showText "Copernicus"
 
-    extents <- C.textExtents "Copernicus"
+        extents <- C.textExtents "Copernicus"
 
-    C.setFontSize 14
-    C.setSourceRGBA 0.3 0.3 0.3 1.0
-    C.moveTo 16 $ 44 + C.textExtentsHeight extents + 5
-    C.showText "Jonatan H Sundqvist 2015"
+        C.setFontSize 14
+        C.setSourceRGBA 0.3 0.3 0.3 1.0
+        C.moveTo 16 $ 44 + C.textExtentsHeight extents + 5
+        C.showText "Jonatan H Sundqvist 2015"
 
     --
     renderGrid 10 10 $ fromIntegral (fst $ size world) / 10
 
-    --
-    {-action <- C.liftIO . C.withImageSurfaceFromPNG "assets/planets.png" $ (\surface -> return $ 
-        do C.setSourceSurface surface 20 20 >> C.paint)-}
-    -- planets <- C.liftIO $ C.imageSurfaceCreateFromPNG "assets/planets.png"
-    C.setSourceSurface planets 50 50
-    C.rectangle 320 310 250 250
-    C.clip
-    C.paint
-    C.resetClip
+    -- Image
+    when False do
+        {-action <- C.liftIO . C.withImageSurfaceFromPNG "assets/planets.png" $ (\surface -> return $ 
+            do C.setSourceSurface surface 20 20 >> C.paint)-}
+        -- planets <- C.liftIO $ C.imageSurfaceCreateFromPNG "assets/planets.png"
+        C.setSourceSurface planets 50 50
+        C.rectangle 320 310 250 250
+        C.clip
+        C.paint
+        C.resetClip
 
     -- Arrow
     -- renderArrow (40:+40) (200:+120) 80 20 40
