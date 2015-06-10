@@ -47,6 +47,7 @@ import Control.Monad (when, forM_)
 import Data.IORef
 
 import qualified Copernicus as Cop
+import qualified Palette
 
 
 
@@ -54,7 +55,7 @@ import qualified Copernicus as Cop
 -- Types
 ---------------------------------------------------------------------------------------------------
 -- TODO: One trail per body ([[Complex Double]]) (?)
-data World = World { frame :: Int, size :: (Int, Int), bodies :: [Cop.Body Double], trails :: [Complex Double] } deriving Show
+data World = World { frame :: Int, size :: (Int, Int), bodies :: [Cop.Body Double], trails :: [[Complex Double]] } deriving Show
 
 
 
@@ -99,7 +100,7 @@ mainGTK = do
 
     -- Animation
     (w,h)    <- widgetSize window
-    worldVar <- newIORef $ World { frame=0, size=(w,h), bodies=bodies', trails=[] } --
+    worldVar <- newIORef $ World { frame=0, size=(w,h), bodies=bodies', trails=map (const []) bodies' } --
     when animate $ timeoutAdd (onanimate worldVar canvas) (1000 `div` fps) >> return ()
 
 
@@ -167,9 +168,9 @@ onanimate world canvas = do
 -- |
 -- TODO: Refactor, make readable (State monad, lenses)
 update :: World -> World
-update w@(World { frame=f, bodies=(b@(Cop.Body p _ _):odies) } ) = w { frame=f+1,
-                                                                       bodies=map (Cop.animate (1.0/fromIntegral fps)) (b:odies),
-                                                                       trails=take 50 $ p:trails w }
+update w@(World { frame=f, bodies=bodies'' } ) = w { frame=f+1,
+                                                                       bodies=map (Cop.animate (1.0/fromIntegral fps)) bodies'',
+                                                                       trails=map (\ (trail, (Cop.Body p _ _)) -> take 50 $ p:trail) $ zip (trails w) bodies'' }
 
 
 
@@ -210,7 +211,13 @@ renderWorld world = do
     C.stroke
 
     -- Trail(s)
-    forM_ (trails world) $ flip renderCircle 3 . toScreenCoords world
+    -- TODO: Better way of doing 2D 'loops'
+    forM_ (zip [Palette.green, Palette.red, Palette.blue] $ trails world) $ \(fill, trail) -> do
+        forM_ trail $ \ dot -> do
+            -- C.setSourceRGBA (cos $ 1.3*c) (sin $ 5*c) 0.2 1.0
+            Palette.choose fill
+            renderCircle (toScreenCoords world dot) 3
+
     -- Render bodies
     forM_ (bodies world) $ renderBody . bodyToScreenCoords world
 
@@ -221,7 +228,7 @@ render :: World -> C.Surface -> C.Render ()
 render world planets = do
 
     --
-    when False do 
+    when False $ do 
         C.moveTo 16 44
         C.liftIO $ C.fontOptionsCreate >>= flip C.fontOptionsSetAntialias C.AntialiasSubpixel
         C.selectFontFace "Helvetica" C.FontSlantNormal C.FontWeightNormal
@@ -240,7 +247,7 @@ render world planets = do
     renderGrid 10 10 $ fromIntegral (fst $ size world) / 10
 
     -- Image
-    when False do
+    when False $ do
         {-action <- C.liftIO . C.withImageSurfaceFromPNG "assets/planets.png" $ (\surface -> return $ 
             do C.setSourceSurface surface 20 20 >> C.paint)-}
         -- planets <- C.liftIO $ C.imageSurfaceCreateFromPNG "assets/planets.png"
@@ -253,38 +260,41 @@ render world planets = do
     -- Arrow
     -- renderArrow (40:+40) (200:+120) 80 20 40
     -- TODO: Don't hard-code arrow values
-    forM_ (bodies world) $ \ body -> do
-        let (from, to, len, width, headWidth) = (40:+50, let (Cop.Body p _ _) = body in toScreenCoords world p, 0.78 * magnitude (to-from), 40, 88)
-        let thearrow = arrow from to len width headWidth
-        renderArrow from to len width headWidth
+    when False $ do
+        forM_ (bodies world) $ \ body -> do
+            let (from, to, len, width, headWidth) = (40:+50, let (Cop.Body p _ _) = body in toScreenCoords world p, 0.78 * magnitude (to-from), 40, 88)
+            let thearrow = arrow from to len width headWidth
+            renderArrow from to len width headWidth
 
-        -- Arrow vertices
-        C.setSourceRGBA 0 0 0 1.0
-        forM_ thearrow (flip renderCircle 5)
+            -- Arrow vertices
+            C.setSourceRGBA 0 0 0 1.0
+            forM_ thearrow (flip renderCircle 5)
 
-        C.setSourceRGBA 0 0 0 1.0
-        forM_ (zip [1..] thearrow) $ \(n, p) -> vectorise C.moveTo (p+(6:+6)) >> C.showText (show n)
+            C.setSourceRGBA 0 0 0 1.0
+            forM_ (zip [1..] thearrow) $ \(n, p) -> vectorise C.moveTo (p+(6:+6)) >> C.showText (show n)
 
-        -- Arrow symmetry line
-        vectorise C.moveTo from
-        vectorise C.lineTo to
-        C.setSourceRGBA 0 0 0 1.0
-        C.stroke
+            -- Arrow symmetry line
+            vectorise C.moveTo from
+            vectorise C.lineTo to
+            C.setSourceRGBA 0 0 0 1.0
+            C.stroke
 
     -- Shifting polygons
-    let sides       = 3 + (flip mod 10 . flip div fps $ frame world)
-        radius mini = (+mini) . (*35.0) . (+1.0) . sin  $ elapsed world
-        origin      = (w/2):+(h/2)
-        fill        = False in forM_ [(10, (0.0, 0.5, 0, 1.0)),
-                                      (30, (0.3, 0.0, 0.8, 1.0)),
-                                      (50, (0.0, 0.7, 0.2, 1.0)),
-                                      (70, (0.8, 0.8, 0.1, 1.0))] $ \(mini, colour) -> renderPolygon sides (radius mini) origin colour fill
+    when False $ do
+        let sides       = 3 + (flip mod 10 . flip div fps $ frame world)
+            radius mini = (+mini) . (*35.0) . (+1.0) . sin  $ elapsed world
+            origin      = (w/2):+(h/2)
+            fill        = False in forM_ [(10, (0.0, 0.5, 0, 1.0)),
+                                          (30, (0.3, 0.0, 0.8, 1.0)),
+                                          (50, (0.0, 0.7, 0.2, 1.0)),
+                                          (70, (0.8, 0.8, 0.1, 1.0))] $ \(mini, colour) -> renderPolygon sides (radius mini) origin colour fill
 
     --  Bouncing balls
     renderWorld world
 
     -- Circle carousel
-    renderCircleArc 10 origin spread radius begin τ
+    when False $ do
+        renderCircleArc 10 origin spread radius begin τ
     where count  = 10
           origin = (w/2):+(h/2) 
           spread = 50 + 50 * (1 + sin (τ * rpm * elapsed world)) -- 134      -- Radius of the big circle (pixels?)
