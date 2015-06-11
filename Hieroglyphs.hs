@@ -26,6 +26,10 @@
 --          -- Fading
 --
 --        - Worry about clean-up or rely on GC (eg. freeing surfaces) (?)
+--
+--        - Shape API
+--          -- Should render functions simply set a path or fill them in/draw them too
+--          -- Utility functions for colour/fill/stroke/line width/etc. (?)
 
 -- SPEC | -
 --        -
@@ -186,11 +190,19 @@ elapsed world = (fromIntegral $ frame world) * 1.0/fromIntegral fps
 -- TODO: Make polymorphic
 -- TODO: Apply coordinate transformations (to World perhaps; make world a monad?)
 renderBody :: Cop.Body Double -> C.Render ()
-renderBody (Cop.Body (x:+y) v' a') = do
+renderBody (Cop.Body (x:+y) (vx:+vy) (ax:+ay)) = do
     -- C.arc (x/3 + 200) (y/3 + 200) 12 0 τ
+    -- Body
     C.arc x y 12 0 τ
-    C.setSourceRGBA 0 0.2 0.3 1.0
+    C.setSourceRGBA 0.5 0.2 0.3 1.0
     C.fill
+
+    -- Vector arrows
+    C.setSourceRGBA 0.12 0.05 1 0.8
+    renderArrow (x:+y) (x:+(y+vy*10)) (abs vy*10*0.8) 5 12
+
+    C.setSourceRGBA 1 0.05 0.12 0.8
+    renderArrow (x:+y) ((x+vx*10):+y) (abs vx*10*0.8) 5 12
 
 
 
@@ -323,7 +335,7 @@ renderArrow from to sl sw hw = do
     vectorise C.moveTo first
     forM_ rest $ vectorise C.lineTo
 
-    C.setSourceRGBA 1 0.8 0.15 1.0
+    -- C.setSourceRGBA 1 0.8 0.15 1.0
     C.setLineWidth 3
     C.stroke
 
@@ -344,34 +356,6 @@ renderPolygon sides radius origin (r,g,b,a) filled = do
         then C.fill
         else C.stroke
     where ((fx:+fy):rest) = polygon sides radius origin ++ [fx:+fy]
-
-
-
--- |
-renderCross :: Double -> Double -> C.Render ()
-renderCross w h = do
-    C.setSourceRGB 1 1 1
-    C.paint
-
-    C.setSourceRGB 0 0 0
-    C.moveTo 0 0
-    C.lineTo w h
-    C.moveTo w 0
-    C.lineTo 0 h
-    C.setLineWidth (0.1 * (h + w))
-    C.stroke
-
-    C.rectangle 0 0 (0.5 * w) (0.5 * h)
-    C.setSourceRGBA 1 0 0 0.8
-    C.fill
-
-    C.rectangle 0 (0.5 * h) (0.5 * w) (0.5 * h)
-    C.setSourceRGBA 0 1 0 0.6
-    C.fill
-
-    C.rectangle (0.5 * w) 0 (0.5 * w) (0.5 * h)
-    C.setSourceRGBA 0 0 1 0.4
-    C.fill
 
 
 
