@@ -39,7 +39,7 @@
 ---------------------------------------------------------------------------------------------------
 -- Compiler instructions
 ---------------------------------------------------------------------------------------------------
-{-# LANGUAGE TemplateHaskell #-}
+-- {-# LANGUAGE TemplateHaskell #-}
 
 
 
@@ -54,14 +54,14 @@ module Hieroglyphs where
 ---------------------------------------------------------------------------------------------------
 -- We'll need these
 ---------------------------------------------------------------------------------------------------
-import Graphics.UI.Gtk hiding (set)            --
+import Graphics.UI.Gtk                         --
 import qualified Graphics.Rendering.Cairo as C --
 
 import Data.Complex                --
 import Control.Monad (when, forM_) --
 import Data.IORef                  --
 
-import Control.Lens                --
+-- import qualified Control.Lens as Lens --
 
 import qualified Copernicus as Cop --
 import qualified Palette           --
@@ -94,8 +94,8 @@ bodies' = map (\ (p', v', g') -> Cop.Body p' v' g') [(0.0:+1.0, v, g), (1.0:+0.0
 ---------------------------------------------------------------------------------------------------
 -- Lenses
 ---------------------------------------------------------------------------------------------------
-makeLenses ''World
-makeLenses ''Cop.Body
+-- Lens.makeLenses ''World
+-- Lens.makeLenses ''Cop.Body
 
 
 
@@ -219,11 +219,13 @@ renderBody (Cop.Body (x:+y) (vx:+vy) (ax:+ay)) = do
     C.fill
 
     -- Vector arrows
-    C.setSourceRGBA 0.12 0.05 1 0.8
     renderArrow (x:+y) (x:+(y+vy*10)) (abs vy*10*0.8) 5 12
+    C.setSourceRGBA 0.12 0.05 1 0.8
+    C.fill
 
-    C.setSourceRGBA 1 0.05 0.12 0.8
     renderArrow (x:+y) ((x+vx*10):+y) (abs vx*10*0.8) 5 12
+    C.setSourceRGBA 1 0.05 0.12 0.8
+    C.fill
 
 
 
@@ -297,7 +299,10 @@ render world planets = do
         forM_ (bodies world) $ \ body -> do
             let (from, to, len, width, headWidth) = (40:+50, let (Cop.Body p _ _) = body in toScreenCoords world p, 0.78 * magnitude (to-from), 40, 88)
             let thearrow = arrow from to len width headWidth
+            
             renderArrow from to len width headWidth
+            C.setLineWidth 3
+            C.stroke
 
             -- Arrow vertices
             C.setSourceRGBA 0 0 0 1.0
@@ -355,10 +360,9 @@ renderArrow from to sl sw hw = do
     let (first:rest) = closePath $ arrow from to sl sw hw
     vectorise C.moveTo first
     forM_ rest $ vectorise C.lineTo
-
     -- C.setSourceRGBA 1 0.8 0.15 1.0
-    C.setLineWidth 3
-    C.stroke
+    -- C.setLineWidth 3
+    -- C.stroke
 
 
 
@@ -491,7 +495,7 @@ translate = (+)
 
 -- |
 toScreenCoords :: World -> Complex Double -> Complex Double
-toScreenCoords world = transform (sx:+sy) translation
+toScreenCoords world = scale (sx:+sy) . translate translation
     where (w, h)   = let (w', h') = size world in (fromIntegral w', fromIntegral h')
           (sx:+sy)    = (w/10):+(-h/10)
           translation = w/(2*sx):+h/(2*sy)
