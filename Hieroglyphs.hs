@@ -47,7 +47,9 @@
 ---------------------------------------------------------------------------------------------------
 -- API definition
 ---------------------------------------------------------------------------------------------------
-module Hieroglyphs where
+-- Including a module statement seems to interfer with the compilation process. I need to figure
+-- out how to easily toggle between compile-as-module and compile-as-main.
+-- module Hieroglyphs where
 
 
 
@@ -210,20 +212,27 @@ elapsed world = (fromIntegral $ frame world) * 1.0/fromIntegral fps
 -- |
 -- TODO: Make polymorphic
 -- TODO: Apply coordinate transformations (to World perhaps; make world a monad?)
-renderBody :: Cop.Body Double -> C.Render ()
-renderBody (Cop.Body (x:+y) (vx:+vy) (ax:+ay)) = do
+renderBody :: Cop.Body Double -> World -> C.Render ()
+renderBody (Cop.Body p (vx:+vy) (ax:+ay)) world = do
     -- C.arc (x/3 + 200) (y/3 + 200) 12 0 τ
     -- Body
-    C.arc x y 12 0 τ
+    vectorise C.arc (toScreenCoords world p) 12 0 τ
     C.setSourceRGBA 0.5 0.2 0.3 1.0
     C.fill
 
     -- Vector arrows
-    renderArrow (x:+y) (x:+(y+vy*10)) (abs vy*10*0.8) 5 12
+    -- TODO: Scaling and labelling vectors
+    let from = toScreenCoords world p
+        to   = toScreenCoords world $ p + (0:+0.2*vy)
+        len  = realPart . abs $ to - from 
+        in renderArrow from to (0.8*len) 5 12
     C.setSourceRGBA 0.12 0.05 1 0.8
     C.fill
 
-    renderArrow (x:+y) ((x+vx*10):+y) (abs vx*10*0.8) 5 12
+    let from = toScreenCoords world p
+        to   = toScreenCoords world $ p + (0.2*vx:+0)
+        len  = realPart . abs $ to - from 
+        in renderArrow from to (0.8*len) 5 12
     C.setSourceRGBA 1 0.05 0.12 0.8
     C.fill
 
@@ -247,14 +256,14 @@ renderWorld world = do
 
     -- Trail(s)
     -- TODO: Better way of doing 2D 'loops'
-    forM_ (zip [Palette.green, Palette.red, Palette.blue] $ trails world) $ \(fill, trail) -> do
+    forM_ (zip [Palette.green, Palette.red, Palette.blue, Palette.orange] $ trails world) $ \(fill, trail) -> do
         forM_ trail $ \ dot -> do
             -- C.setSourceRGBA (cos $ 1.3*c) (sin $ 5*c) 0.2 1.0
             Palette.choose fill
             renderCircle (toScreenCoords world dot) 3
 
     -- Render bodies
-    forM_ (bodies world) $ renderBody . bodyToScreenCoords world
+    forM_ (bodies world) $ flip renderBody world -- . bodyToScreenCoords world
 
 
 
