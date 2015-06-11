@@ -36,14 +36,25 @@
 
 
 
--- module Hieroglyphs where
+---------------------------------------------------------------------------------------------------
+-- Compiler instructions
+---------------------------------------------------------------------------------------------------
+{-# LANGUAGE TemplateHaskell #-}
+
+
+
+
+---------------------------------------------------------------------------------------------------
+-- API definition
+---------------------------------------------------------------------------------------------------
+module Hieroglyphs where
 
 
 
 ---------------------------------------------------------------------------------------------------
 -- We'll need these
 ---------------------------------------------------------------------------------------------------
-import Graphics.UI.Gtk -- hiding (fill)        --
+import Graphics.UI.Gtk hiding (set)            --
 import qualified Graphics.Rendering.Cairo as C --
 
 import Data.Complex                --
@@ -83,8 +94,8 @@ bodies' = map (\ (p', v', g') -> Cop.Body p' v' g') [(0.0:+1.0, v, g), (1.0:+0.0
 ---------------------------------------------------------------------------------------------------
 -- Lenses
 ---------------------------------------------------------------------------------------------------
-makeLenses' World
-makeLenses' Cop.Body
+makeLenses ''World
+makeLenses ''Cop.Body
 
 
 
@@ -461,8 +472,8 @@ closePath path = path ++ [head path]
 -- TODO: Use matrix instead (scale and translate should be applied in reverse order when undoing the transformation)
 -- TODO: Add undo parameter (?)
 -- TODO: Pure function, move to Copernicus.hs or use Cairo matrix functions
-transform :: Complex Double -> Complex Double -> Complex Double -> Complex Double
-transform scaling translation = scale scaling . translate translation
+-- transform :: Complex Double -> Complex Double -> Complex Double -> Complex Double
+-- transform scaling translation = scale scaling . translate translation
 
 
 
