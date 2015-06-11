@@ -43,15 +43,17 @@
 ---------------------------------------------------------------------------------------------------
 -- We'll need these
 ---------------------------------------------------------------------------------------------------
-import Graphics.UI.Gtk -- hiding (fill)
-import qualified Graphics.Rendering.Cairo as C
+import Graphics.UI.Gtk -- hiding (fill)        --
+import qualified Graphics.Rendering.Cairo as C --
 
-import Data.Complex
-import Control.Monad (when, forM_)
-import Data.IORef
+import Data.Complex                --
+import Control.Monad (when, forM_) --
+import Data.IORef                  --
 
-import qualified Copernicus as Cop
-import qualified Palette
+import Control.Lens                --
+
+import qualified Copernicus as Cop --
+import qualified Palette           --
 
 
 
@@ -75,6 +77,14 @@ v = 2.0:+0.5 --40.0 :+ 20.0
 g = 0.0:+(-9.82) --0.0 :+ (-9.82)
 
 bodies' = map (\ (p', v', g') -> Cop.Body p' v' g') [(0.0:+1.0, v, g), (1.0:+0.0, (2.0):+1.50, g), (3.0:+(2.80), v, g), (2.5:+1.92, v, g)]
+
+
+
+---------------------------------------------------------------------------------------------------
+-- Lenses
+---------------------------------------------------------------------------------------------------
+makeLenses' World
+makeLenses' Cop.Body
 
 
 
