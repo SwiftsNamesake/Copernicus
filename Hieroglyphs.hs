@@ -30,6 +30,8 @@
 --        - Shape API
 --          -- Should render functions simply set a path or fill them in/draw them too
 --          -- Utility functions for colour/fill/stroke/line width/etc. (?)
+--
+--        - Application states
 
 -- SPEC | -
 --        -
@@ -66,6 +68,8 @@ import Text.Printf
 
 -- import qualified Control.Lens as Lens --
 
+-- import Southpaw.Utilities.Utilities (chunk)
+
 import qualified Copernicus as Cop --
 import qualified Palette           --
 
@@ -74,8 +78,29 @@ import qualified Palette           --
 ---------------------------------------------------------------------------------------------------
 -- Types
 ---------------------------------------------------------------------------------------------------
+-- |
 -- TODO: One trail per body ([[Complex Double]]) (?)
-data World = World { frame :: Int, size :: (Int, Int), bodies :: [Cop.Body Double], trails :: [[Complex Double]] } deriving Show
+data World = World { frame   :: Int,               -- Frame number
+                     playing :: Bool,              -- Simulation and animations are playing
+                     size    :: (Int, Int),        -- Window size
+                     bodies  :: [Cop.Body Double], -- Bouncing balls
+                     clicks  :: [Complex Double],  -- Click positions
+                     trails  :: [[Complex Double]] -- Past body positions
+                   } deriving Show
+
+
+-- |
+data Settings = Settings { 
+    
+                         }
+
+
+-- |
+-- TODO: Additional data (eg. parameterised on some extra data bundle type)
+data Drawable = Drawable { visible :: Bool,                         --
+                           centre  :: Complex Double,               --
+                           paint   :: Complex Double -> C.Render () --
+                         } --deriving Show
 
 
 
@@ -90,8 +115,6 @@ fps     = 30   :: Int
 v = 2.0:+0.5 --40.0 :+ 20.0
 g = 0.0:+(-9.82) --0.0 :+ (-9.82)
 
-bodies' = map (\ (p', v') -> Cop.Body p' v' g) [(0.0:+1.0, v), (1.0:+0.0, (2.0):+1.50), (3.0:+(2.80), v), (2.5:+1.92, v), (3.5:+1.92, 2.2:+(-3.5)), (4.5:+0.92, v)]
-
 
 
 ---------------------------------------------------------------------------------------------------
@@ -100,9 +123,8 @@ bodies' = map (\ (p', v') -> Cop.Body p' v' g) [(0.0:+1.0, v), (1.0:+0.0, (2.0):
 -- Lens.makeLenses ''World
 -- Lens.makeLenses ''Cop.Body
 
-
 sizeAsVector :: World -> Complex Double
-sizeAsVector world = let (x, y) = size world in (fromIntegral x*0.5):+(fromIntegral y*0.5)
+sizeAsVector world = let (x, y) = size world in (fromIntegral x):+(fromIntegral y)
 
 
 
@@ -132,22 +154,15 @@ mainGTK = do
 
     -- Animation
     (w,h)    <- widgetSize window
-    worldVar <- newIORef $ World { frame=0, size=(w,h), bodies=bodies', trails=map (const []) bodies' } --
+    worldVar <- newIORef $ createWorld w h --
     when animate $ timeoutAdd (onanimate worldVar canvas) (1000 `div` fps) >> return ()
 
     -- Events
-    canvas `on` draw $ (C.liftIO $ readIORef worldVar) >>= flip render planets -- readIORef worldVar >>= \ w -> render (fromIntegral w) (fromIntegral h) w
+    canvas `on` draw $ ondraw worldVar planets
     canvas `on` motionNotifyEvent $ onmousemove
 
-    canvas `on` buttonPressEvent $ do
-        (x, y) <- eventCoordinates
-        C.liftIO $ printf "Mouse down (%f, %f)\n" x y
-        return True
-
-    canvas `on` buttonReleaseEvent $ do
-        (x, y) <- eventCoordinates
-        C.liftIO $ printf "Mouse up (%f, %f)\n" x y
-        return True
+    canvas `on` buttonPressEvent   $ onbuttonpress worldVar
+    canvas `on` buttonReleaseEvent $ onbuttonreleased
 
     window `on` configureEvent $ onresize window worldVar
     window `on` deleteEvent $ C.liftIO mainQuit >> return False -- TODO: Uhmmm... what?
@@ -179,11 +194,29 @@ onresize window worldVar = do
 
 
 -- |
--- onkeypress :: 
+-- onkeypress :: IORef World -> IO Bool
 onkeypress = do
     key <- eventKeyName
     C.liftIO $ print key
     return True
+
+
+
+-- |
+-- onbuttonpress :: IORef World -> IO Bool
+onbuttonpress worldVar = do
+    (x, y) <- eventCoordinates
+    C.liftIO $ modifyIORef worldVar $ \ wd@(World { clicks=c }) -> wd { clicks=(x:+y):c }
+    return True
+
+
+
+-- |
+-- onbuttonreleased ::
+onbuttonreleased = do
+        (x, y) <- eventCoordinates
+        C.liftIO $ printf "Mouse up (%f, %f)\n" x y
+        return True
 
 
 
@@ -197,7 +230,27 @@ onmousemove = do
 
 
 
+-- | 
+-- ondraw ::
+ondraw worldVar planets = do
+    world <- C.liftIO  $ readIORef worldVar
+    render world planets -- readIORef worldVar >>= \ w -> render (fromIntegral w) (fromIntegral h) w
+
+
+
 -- Animation --------------------------------------------------------------------------------------
+-- | In the beginning...
+createWorld :: Int -> Int -> World
+createWorld w h = World { frame=0,
+                          playing=True,
+                          size=(w,h),
+                          bodies=bodies',
+                          trails=map (const []) bodies',
+                          clicks=[] }
+    where bodies' = map (\ (p', v') -> Cop.Body p' v' g) [(0.0:+1.0, v), (1.0:+0.0, (2.0):+1.50), (3.0:+(2.80), v), (2.5:+1.92, v), (3.5:+1.92, 2.2:+(-3.5)), (4.5:+0.92, v)]
+
+
+
 -- |
 onanimate :: IORef World -> DrawingArea -> IO Bool
 onanimate world canvas = do
@@ -212,8 +265,8 @@ onanimate world canvas = do
 -- TODO: Refactor, make readable (State monad, lenses)
 update :: World -> World
 update w@(World { frame=f, bodies=bodies'' } ) = w { frame=f+1,
-                                                                       bodies=map (Cop.animate (1.0/fromIntegral fps)) bodies'',
-                                                                       trails=map (\ (trail, (Cop.Body p _ _)) -> take 50 $ p:trail) $ zip (trails w) bodies'' }
+                                                     bodies=map (Cop.animate (1.0/fromIntegral fps)) bodies'',
+                                                     trails=map (\ (trail, body) -> take 50 $ Cop.position body:trail) $ zip (trails w) bodies'' }
 
 
 
@@ -292,28 +345,13 @@ renderTrail fill trail = forM_ trail $ \dot -> do
 
 
 
--- | Renders onto the canvas on each update
--- TODO: Rename
-render :: World -> C.Surface -> C.Render ()
-render world planets = do
-    when True  $ renderSigns                                             --
-    when True  $ renderGrid 10 10 $ fromIntegral (fst $ size world) / 10 --
-    when False $ renderPlanets planets                                   -- Image
-
-    when False . renderWonkyArrowsPointingAtBalls . map (toScreenCoords world . Cop.position) $ bodies world -- Arrow
-    when False $ renderNestedPolygons (sizeAsVector world) (elapsed world)                                   -- Shifting polygons
-
-    when True  $ renderWorld world --  Bouncing balls
-    when True  $ renderCircleCarousel (sizeAsVector world) (elapsed world) -- Circle carousel
-
-
-
 -- |
 renderGrid :: Int -> Int -> Double -> C.Render ()
 renderGrid cols rows size = do
     -- TODO: Figure out how to use fill AND stroke
-    gridM_ cols rows $ \ cl rw -> tilePath cl rw >> C.fill 
-    gridM_ cols rows $ \ cl rw -> tilePath cl rw >> C.stroke 
+    C.setLineWidth 4
+    gridM_ cols rows $ \ cl rw -> tilePath cl rw >> C.fill   --
+    gridM_ cols rows $ \ cl rw -> tilePath cl rw >> C.stroke --
     where chooseColour cl rw = if (cl `mod` 2) == (rw `mod` 2) then 0.3 else 0.75 -- TODO: This should be a utility function
           tilePath cl rw     = C.rectangle (fromIntegral cl*size) (fromIntegral rw*size) size size >> C.setSourceRGBA 0.22 0.81 (chooseColour cl rw) 0.32
 
@@ -358,6 +396,7 @@ renderCircle (cx:+cy) radius = do
 -- |
 -- TODO: Options for colour, width, closed/open, etc.
 renderPath :: [Complex Double] -> C.Render ()
+renderPath []      = return ()
 renderPath (p:ath) = do
     vectorise C.moveTo p
     forM_ ath $ vectorise C.lineTo
@@ -384,7 +423,34 @@ renderCircleArc
 
 
 
+-- |
+renderBezier :: Complex Double -> Complex Double -> Complex Double -> C.Render ()
+renderBezier (x1:+y1) (x2:+y2) (x3:+y3) = C.curveTo x1 y1 x2 y2 x3 y3
+
+
+
 -- Tailored render functions ----------------------------------------------------------------------
+-- | Renders onto the canvas on each update
+-- TODO: Rename
+render :: World -> C.Surface -> C.Render ()
+render world planets = do
+    when True  $ renderSigns                                             --
+    when True  $ renderGrid 10 10 $ fromIntegral (fst $ size world) / 10 --
+    when False $ renderPlanets planets                                   -- Image
+
+    when False . renderWonkyArrowsPointingAtBalls . map (toScreenCoords world . Cop.position) $ bodies world -- Arrow
+    when False $ renderNestedPolygons ((0.5:+0)*sizeAsVector world) (elapsed world)                          -- Shifting polygons
+
+    when True  $ renderWorld world                                                  -- Bouncing balls
+    when False $ renderCircleCarousel ((0.5:+0)*sizeAsVector world) (elapsed world) -- Circle carousel
+
+    when True $ renderClicks (take 20 $ clicks world) --
+    when True $ forM_ (chunks 3 $ clicks world) \chunk -> case chunk of
+        [a,b,c] -> Palette.choose Palette.darkolivegreen >> renderBezier a b c >> C.stroke
+        _       -> return ()
+
+
+
 -- |
 renderSigns :: C.Render ()
 renderSigns = do
@@ -443,13 +509,16 @@ renderWonkyArrowsPointingAtBalls targets = do
 
 -- |
 renderNestedPolygons :: Complex Double -> Double -> C.Render ()
-renderNestedPolygons origin time = let sides       = 3 + (floor time `mod` 10)
-                                       radius mini = (+mini) . (*35.0) . (+1.0) . sin  $ time
-                                       fill        = False
-                                   in forM_ [(10, (0.0, 0.5, 0, 1.0)),
-                                             (30, (0.3, 0.0, 0.8, 1.0)),
-                                             (50, (0.0, 0.7, 0.2, 1.0)),
-                                             (70, (0.8, 0.8, 0.1, 1.0))] $ \(mini, colour) -> renderPolygon sides (radius mini) origin colour fill
+renderNestedPolygons origin time = forM_ (zip [10, 30..] colours) $ \(mini, colour) -> renderPolygon sides (radius mini) origin colour fill
+    where sides       = 3 + (floor time `mod` 10)
+          radius mini = (+mini) . (*35.0) . (+1.0) . sin $ time
+          fill        = False
+          colours     = [ Palette.cornflowerblue,
+                          Palette.darkolivegreen,
+                          Palette.darkorchid,
+                          Palette.darkslategray,
+                          Palette.crimson,
+                          Palette.darkgoldenrod]
 
 
 
@@ -462,6 +531,14 @@ renderCircleCarousel origin time = renderCircleArc 10 origin spread radius begin
           rpm    = 0.3      --
           begin  = τ * rpm * time
 
+
+
+
+-- |
+renderClicks :: [Complex Double] -> C.Render ()
+renderClicks clicks' = do
+    Palette.choose Palette.darkmagenta
+    renderPath clicks'
 
 
 

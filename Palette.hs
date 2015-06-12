@@ -44,7 +44,6 @@ red    = (1, 0, 0, 1) :: Colour
 green  = (0, 1, 0, 1) :: Colour
 blue   = (0, 0, 1, 1) :: Colour
 
--- orange = ()
 -- From http://www.avatar.se/molscript/doc/colour_names.html (June 11 2015)
 aliceblue            = (0.94117600, 0.97254900, 1.00000000, 1) :: Colour
 antiquewhite         = (0.98039200, 0.92156900, 0.84313700, 1) :: Colour
