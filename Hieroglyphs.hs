@@ -62,6 +62,7 @@ import qualified Graphics.Rendering.Cairo as C --
 import Data.Complex                --
 import Control.Monad (when, forM_) --
 import Data.IORef                  --
+import Text.Printf
 
 -- import qualified Control.Lens as Lens --
 
@@ -89,7 +90,7 @@ fps     = 30   :: Int
 v = 2.0:+0.5 --40.0 :+ 20.0
 g = 0.0:+(-9.82) --0.0 :+ (-9.82)
 
-bodies' = map (\ (p', v', g') -> Cop.Body p' v' g') [(0.0:+1.0, v, g), (1.0:+0.0, (2.0):+1.50, g), (3.0:+(2.80), v, g), (2.5:+1.92, v, g)]
+bodies' = map (\ (p', v') -> Cop.Body p' v' g) [(0.0:+1.0, v), (1.0:+0.0, (2.0):+1.50), (3.0:+(2.80), v), (2.5:+1.92, v), (3.5:+1.92, 2.2:+(-3.5)), (4.5:+0.92, v)]
 
 
 
@@ -117,7 +118,7 @@ mainGTK = do
     set window [ containerChild := frame]
     windowSetDefaultSize window 650 650
 
-    widgetAddEvents canvas [PointerMotionMask]
+    widgetAddEvents canvas [PointerMotionMask] -- MouseButton1Mask
 
     widgetShowAll window
 
@@ -130,10 +131,19 @@ mainGTK = do
     worldVar <- newIORef $ World { frame=0, size=(w,h), bodies=bodies', trails=map (const []) bodies' } --
     when animate $ timeoutAdd (onanimate worldVar canvas) (1000 `div` fps) >> return ()
 
-
     -- Events
     canvas `on` draw $ (C.liftIO $ readIORef worldVar) >>= flip render planets -- readIORef worldVar >>= \ w -> render (fromIntegral w) (fromIntegral h) w
     canvas `on` motionNotifyEvent $ onmousemove
+
+    canvas `on` buttonPressEvent $ do
+        (x, y) <- eventCoordinates
+        C.liftIO $ printf "Mouse down (%f, %f)\n" x y
+        return True
+
+    canvas `on` buttonReleaseEvent $ do
+        (x, y) <- eventCoordinates
+        C.liftIO $ printf "Mouse up (%f, %f)\n" x y
+        return True
 
     window `on` configureEvent $ onresize window worldVar
     window `on` deleteEvent $ C.liftIO mainQuit >> return False -- TODO: Uhmmm... what?
@@ -143,6 +153,7 @@ mainGTK = do
 
 
 
+-- Event helpers ----------------------------------------------------------------------------------
 -- |
 -- TODO: Make polymorphic
 widgetSize :: WidgetClass self => self -> IO (Int, Int)
@@ -153,6 +164,7 @@ widgetSize widget = do
 
 
 
+-- Events -----------------------------------------------------------------------------------------
 -- |
 -- onresize :: WidgetClass self => self -> IORef World -> IO Bool
 onresize window worldVar = do
@@ -256,14 +268,23 @@ renderWorld world = do
 
     -- Trail(s)
     -- TODO: Better way of doing 2D 'loops'
-    forM_ (zip [Palette.green, Palette.red, Palette.blue, Palette.orange] $ trails world) $ \(fill, trail) -> do
-        forM_ trail $ \ dot -> do
-            -- C.setSourceRGBA (cos $ 1.3*c) (sin $ 5*c) 0.2 1.0
-            Palette.choose fill
-            renderCircle (toScreenCoords world dot) 3
+    forM_ (zip [Palette.aquamarine,
+                Palette.gold,
+                Palette.orange,
+                Palette.crimson,
+                Palette.firebrick,
+                Palette.darkviolet] . map (map $ toScreenCoords world) $ trails world) $ uncurry renderTrail
 
     -- Render bodies
-    forM_ (bodies world) $ flip renderBody world -- . bodyToScreenCoords world
+    forM_ (bodies world) $ flip renderBody world
+
+
+
+-- | renderTrail
+renderTrail :: Palette.Colour -> [Complex Double] -> C.Render ()
+renderTrail fill trail = forM_ trail $ \dot -> do
+    Palette.choose fill
+    renderCircle dot 3
 
 
 
@@ -355,9 +376,9 @@ render world planets = do
 -- |
 renderGrid :: Int -> Int -> Double -> C.Render ()
 renderGrid cols rows size = do
-    sequence_ [ tilePath cl rw >> C.fill   | cl <- [0..(cols-1)], rw <- [0..(rows-1)] ] -- Tiles
-    sequence_ [ tilePath cl rw >> C.stroke | cl <- [0..(cols-1)], rw <- [0..(rows-1)] ] -- Borders
     -- TODO: Figure out how to use fill AND stroke
+    gridM_ cols rows $ \ cl rw -> tilePath cl rw >> C.fill 
+    gridM_ cols rows $ \ cl rw -> tilePath cl rw >> C.stroke 
     where chooseColour cl rw = if (cl `mod` 2) == (rw `mod` 2) then 0.3 else 0.75 -- TODO: This should be a utility function
           tilePath cl rw     = C.rectangle (fromIntegral cl*size) (fromIntegral rw*size) size size >> C.setSourceRGBA 0.22 0.81 (chooseColour cl rw) 0.32
 
@@ -369,9 +390,6 @@ renderArrow from to sl sw hw = do
     let (first:rest) = closePath $ arrow from to sl sw hw
     vectorise C.moveTo first
     forM_ rest $ vectorise C.lineTo
-    -- C.setSourceRGBA 1 0.8 0.15 1.0
-    -- C.setLineWidth 3
-    -- C.stroke
 
 
 
@@ -438,7 +456,7 @@ renderCircleArc
 -- TODO: Make polymorphic
 -- TODO: Move to geometry section
 -- polygon :: (Floating f, RealFloat f) => Int -> f -> Complex f -> [Complex f]
-polygon :: Int -> Double -> Complex Double -> [Complex Double] 
+polygon :: Int -> Double -> Complex Double -> [Complex Double]
 polygon sides radius origin = [ let θ = arg n in origin + ((radius * cos θ):+(radius * sin θ)) | n <- [1..sides]]
     where arg n = fromIntegral n * (2*π)/fromIntegral sides
 
@@ -453,13 +471,11 @@ arrow from to sl sw hw = [from     + straight (sw/2), --
                           to,                         --
                           shaftEnd - straight (hw/2), --
                           shaftEnd - straight (sw/2), --
-                          from     - straight (sw/2)]  --
-    where along a b distance = a + (mkPolar distance . snd . polar $ b-a) -- Walk distance along the from a to b
+                          from     - straight (sw/2)] --
+    where along a b distance = (a +) . mkPolar distance . snd . polar $ b-a -- Walk distance along the from a to b
           normal a b = let (mag, arg) = polar (b-a) in mkPolar mag (arg+π/2)
           shaftEnd = along from to sl --
           straight = along (0:+0) (normal from to) -- Vector perpendicular to the centre line
-          -- shaftWidth = along (0:+0) (normal a b) (sw/2) -- Half of shaft width (vector relative to symmetry line)
-          -- headWidth  = along (0:+0) (normal a b) (hw/2)
 
 
 
@@ -474,7 +490,21 @@ vectorise f (re:+im) = f re im
 -- | 
 -- TODO: Unsafe, use Maybe (?)
 closePath :: [Complex Double] -> [Complex Double]
-closePath path = path ++ [head path] 
+closePath path = path ++ [head path]
+
+
+
+-- |
+grid :: (Integral n, Enum n) => n -> n -> (n -> n -> a) -> [a] 
+grid cols rows f = [ f cl rw | cl <- [0..(cols-1)], rw <- [0..(rows-1)] ] -- Tiles
+
+
+
+-- | 
+-- TODO: Rename (eg. something pertaining to 2D loops)
+-- TODO: Underscores, grrr
+gridM_ :: (Integral n, Enum n, Monad m) => n -> n -> (n -> n -> m a) -> m ()
+gridM_ cols rows f = sequence_ $ grid cols rows f
 
 
 
@@ -490,6 +520,7 @@ closePath path = path ++ [head path]
 
 
 
+-- Coordinate systems -----------------------------------------------------------------------------
 -- |
 scale :: Complex Double -> Complex Double -> Complex Double
 scale (sx:+sy) (x:+y) = (sx*x):+(sy*y) 

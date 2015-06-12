@@ -66,12 +66,10 @@ animate t (Body p v a) = collide ground $ Body (parabola t p v a) (v + (t:+0)*a)
 	where ground = 0.0 -- 30+30/2-540/2 (previous hard-coded value)
 
 
---
+
+-- | Moves a point along the given parabola for the given amount of time
 parabola :: (RealFloat f, Floating f) => f -> Vector f -> Vector f -> Vector f -> Vector f
-parabola t p v a = let (px:+py) = p
-                       (vx:+vy) = v
-                       (ax:+ay) = a
-                   in (px + vx*t + 0.5*ax*t**2) :+ (py + vy*t + 0.5*ay*t**2)
+parabola t (px:+py) (vx:+vy) (ax:+ay) = (px + vx*t + 0.5*ax*t**2) :+ (py + vy*t + 0.5*ay*t**2)
 
 
 
@@ -88,10 +86,27 @@ collide gnd (Body (px:+py) (vx:+vy) a) = Body (px:+py) ((invertIf (\ _ -> (px <=
 
 
 
--- | ETA (estimated time of arrival)
--- TODO: Rename (eg. timeUntil, solveForT, etc)
+-- | ETA (estimated time of arrival), given the inital position (p') and velocity (v')
+--   and the acceleration.
+-- TODO: Deal with v=0, a=0 (✓)
+-- TODO: Take collisions into account, both axis (?)
+-- TODO: Rename (eg. timeUntil, solveForT, predict, etc)
+-- TODO: Simplify if possible
 -- TODO: Parabola type (eg. Parabola a v x)
 -- eta :: Acceleration
+solveParabola :: (RealFloat f, Floating f) => f -> f -> f -> f -> Maybe f
+solveParabola p' 0  0  p
+	| p' == p   = Just 0
+	| otherwise = Nothing
+
+solveParabola p' v' 0  p
+	| (v' == 0) && (p' /= p) = Nothing
+	| otherwise              = Just $ (p - p')/v'
+
+solveParabola p' v' a' p
+	| discriminant > 0  = Just $ (-v'/a') + sqrt discriminant
+	| otherwise         = Nothing
+	where discriminant = (v'/a')**2 - 2*(p' - p)/a' -- We're not interested in imaginary solutions
 
 
 
