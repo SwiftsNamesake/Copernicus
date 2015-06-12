@@ -36,8 +36,7 @@ module Copernicus where
 ---------------------------------------------------------------------------------------------------
 import Data.Complex
 -- import Control.Monad (when)
-
-import Graphics.Gloss.Geometry.Angle (degToRad, radToDeg, normaliseAngle)
+-- import Graphics.Gloss.Geometry.Angle (degToRad, radToDeg, normaliseAngle)
 
 
 
@@ -54,12 +53,28 @@ data Body f = Body (Vector f) (Vector f) (Vector f) deriving Show -- Add argumen
 ---------------------------------------------------------------------------------------------------
 -- Functions
 ---------------------------------------------------------------------------------------------------
-clampAngle :: Float -> Float
-clampAngle = radToDeg . normaliseAngle . degToRad
+-- Accessors --------------------------------------------------------------------------------------
+-- |
+-- TODO: Replace with lenses
+position :: Body f -> Vector f
+position (Body p _ _) = p
+
+velocity :: Body f -> Vector f
+velocity (Body _ v _) = v
+
+acceleration :: Body f -> Vector f
+acceleration (Body _ _ a) = a
 
 
 
---
+---------------------------------------------------------------------------------------------------
+-- |
+-- clampAngle :: Float -> Float
+-- clampAngle = radToDeg . normaliseAngle . degToRad
+
+
+
+-- |
 -- TODO: Make them change colour when bouncing (?)
 animate :: (RealFloat f, Floating f) => f -> Body f -> Body f
 animate t (Body p v a) = collide ground $ Body (parabola t p v a) (v + (t:+0)*a) a
@@ -73,7 +88,7 @@ parabola t (px:+py) (vx:+vy) (ax:+ay) = (px + vx*t + 0.5*ax*t**2) :+ (py + vy*t 
 
 
 
--- collide
+-- | collide
 -- Very primitive for now
 -- TODO: Use 'contains' function (Range -> Value -> Bool)
 -- TODO: Don't hard-code bounds (left, right)

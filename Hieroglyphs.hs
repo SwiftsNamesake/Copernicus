@@ -101,6 +101,10 @@ bodies' = map (\ (p', v') -> Cop.Body p' v' g) [(0.0:+1.0, v), (1.0:+0.0, (2.0):
 -- Lens.makeLenses ''Cop.Body
 
 
+sizeAsVector :: World -> Complex Double
+sizeAsVector world = let (x, y) = size world in (fromIntegral x*0.5):+(fromIntegral y*0.5)
+
+
 
 ---------------------------------------------------------------------------------------------------
 -- Functions
@@ -288,88 +292,19 @@ renderTrail fill trail = forM_ trail $ \dot -> do
 
 
 
--- |
+-- | Renders onto the canvas on each update
+-- TODO: Rename
 render :: World -> C.Surface -> C.Render ()
 render world planets = do
+    when True  $ renderSigns                                             --
+    when True  $ renderGrid 10 10 $ fromIntegral (fst $ size world) / 10 --
+    when False $ renderPlanets planets                                   -- Image
 
-    --
-    when False $ do 
-        C.moveTo 16 44
-        C.liftIO $ C.fontOptionsCreate >>= flip C.fontOptionsSetAntialias C.AntialiasSubpixel
-        C.selectFontFace "Helvetica" C.FontSlantNormal C.FontWeightNormal
-        C.setFontSize 30
-        C.setSourceRGBA 0.62 0.62 0.62 0.7
-        C.showText "Copernicus"
+    when False . renderWonkyArrowsPointingAtBalls . map (toScreenCoords world . Cop.position) $ bodies world -- Arrow
+    when False $ renderNestedPolygons (sizeAsVector world) (elapsed world)                                   -- Shifting polygons
 
-        extents <- C.textExtents "Copernicus"
-
-        C.setFontSize 14
-        C.setSourceRGBA 0.3 0.3 0.3 1.0
-        C.moveTo 16 $ 44 + C.textExtentsHeight extents + 5
-        C.showText "Jonatan H Sundqvist 2015"
-
-    --
-    renderGrid 10 10 $ fromIntegral (fst $ size world) / 10
-
-    -- Image
-    when False $ do
-        {-action <- C.liftIO . C.withImageSurfaceFromPNG "assets/planets.png" $ (\surface -> return $ 
-            do C.setSourceSurface surface 20 20 >> C.paint)-}
-        -- planets <- C.liftIO $ C.imageSurfaceCreateFromPNG "assets/planets.png"
-        C.setSourceSurface planets 50 50
-        C.rectangle 320 310 250 250
-        C.clip
-        C.paint
-        C.resetClip
-
-    -- Arrow
-    -- renderArrow (40:+40) (200:+120) 80 20 40
-    -- TODO: Don't hard-code arrow values
-    when False $ do
-        forM_ (bodies world) $ \ body -> do
-            let (from, to, len, width, headWidth) = (40:+50, let (Cop.Body p _ _) = body in toScreenCoords world p, 0.78 * magnitude (to-from), 40, 88)
-            let thearrow = arrow from to len width headWidth
-            
-            renderArrow from to len width headWidth
-            C.setLineWidth 3
-            C.stroke
-
-            -- Arrow vertices
-            C.setSourceRGBA 0 0 0 1.0
-            forM_ thearrow (flip renderCircle 5)
-
-            C.setSourceRGBA 0 0 0 1.0
-            forM_ (zip [1..] thearrow) $ \(n, p) -> vectorise C.moveTo (p+(6:+6)) >> C.showText (show n)
-
-            -- Arrow symmetry line
-            vectorise C.moveTo from
-            vectorise C.lineTo to
-            C.setSourceRGBA 0 0 0 1.0
-            C.stroke
-
-    -- Shifting polygons
-    when False $ do
-        let sides       = 3 + (flip mod 10 . flip div fps $ frame world)
-            radius mini = (+mini) . (*35.0) . (+1.0) . sin  $ elapsed world
-            origin      = (w/2):+(h/2)
-            fill        = False in forM_ [(10, (0.0, 0.5, 0, 1.0)),
-                                          (30, (0.3, 0.0, 0.8, 1.0)),
-                                          (50, (0.0, 0.7, 0.2, 1.0)),
-                                          (70, (0.8, 0.8, 0.1, 1.0))] $ \(mini, colour) -> renderPolygon sides (radius mini) origin colour fill
-
-    --  Bouncing balls
-    renderWorld world
-
-    -- Circle carousel
-    when False $ do
-        renderCircleArc 10 origin spread radius begin τ
-    where count  = 10
-          origin = (w/2):+(h/2) 
-          spread = 50 + 50 * (1 + sin (τ * rpm * elapsed world)) -- 134      -- Radius of the big circle (pixels?)
-          radius = 20       -- Radius of a small circle (pixels?)
-          (w,h)  = let (w', h') = size world in (fromIntegral w', fromIntegral h')
-          rpm    = 0.3      --
-          begin  = τ * rpm * elapsed world
+    when True  $ renderWorld world --  Bouncing balls
+    when True  $ renderCircleCarousel (sizeAsVector world) (elapsed world) -- Circle carousel
 
 
 
@@ -396,7 +331,7 @@ renderArrow from to sl sw hw = do
 -- | 
 -- TODO: Add arguments for colour, stroke, etc.
 -- TODO: Make polymorphic
-renderPolygon :: Int -> Double -> Complex Double -> (Double, Double, Double, Double) -> Bool -> C.Render ()
+renderPolygon :: Integral int => int -> Double -> Complex Double -> (Double, Double, Double, Double) -> Bool -> C.Render ()
 renderPolygon sides radius origin (r,g,b,a) filled = do
     -- TODO: Refine 'wrap-around logic'
     C.moveTo fx fy
@@ -449,6 +384,87 @@ renderCircleArc
 
 
 
+-- Tailored render functions ----------------------------------------------------------------------
+-- |
+renderSigns :: C.Render ()
+renderSigns = do
+    C.moveTo 16 44
+    C.liftIO $ C.fontOptionsCreate >>= flip C.fontOptionsSetAntialias C.AntialiasSubpixel
+    C.selectFontFace "Helvetica" C.FontSlantNormal C.FontWeightNormal
+    C.setFontSize 30
+    C.setSourceRGBA 0.62 0.62 0.62 0.7
+    C.showText "Copernicus"
+
+    extents <- C.textExtents "Copernicus"
+
+    C.setFontSize 14
+    C.setSourceRGBA 0.3 0.3 0.3 1.0
+    C.moveTo 16 $ 44 + C.textExtentsHeight extents + 5
+    C.showText "Jonatan H Sundqvist 2015"
+
+
+
+-- |
+renderPlanets :: C.Surface -> C.Render ()
+renderPlanets planets = do
+    C.setSourceSurface planets 50 50
+    C.rectangle 320 310 250 250
+    C.clip
+    C.paint
+    C.resetClip
+
+
+
+-- |
+renderWonkyArrowsPointingAtBalls :: [Complex Double] -> C.Render ()
+renderWonkyArrowsPointingAtBalls targets = do
+    forM_ targets $ \ target -> do
+        let (from, to, len, width, headWidth) = (40:+50, target, 0.78 * magnitude (to-from), 40, 88)
+        let thearrow = arrow from to len width headWidth
+        
+        renderArrow from to len width headWidth
+        C.setLineWidth 3
+        C.stroke
+
+        -- Arrow vertices
+        C.setSourceRGBA 0 0 0 1.0
+        forM_ thearrow (flip renderCircle 5)
+
+        C.setSourceRGBA 0 0 0 1.0
+        forM_ (zip [1..] thearrow) $ \(n, p) -> vectorise C.moveTo (p+(6:+6)) >> C.showText (show n)
+
+        -- Arrow symmetry line
+        vectorise C.moveTo from
+        vectorise C.lineTo to
+        C.setSourceRGBA 0 0 0 1.0
+        C.stroke
+
+
+
+-- |
+renderNestedPolygons :: Complex Double -> Double -> C.Render ()
+renderNestedPolygons origin time = let sides       = 3 + (floor time `mod` 10)
+                                       radius mini = (+mini) . (*35.0) . (+1.0) . sin  $ time
+                                       fill        = False
+                                   in forM_ [(10, (0.0, 0.5, 0, 1.0)),
+                                             (30, (0.3, 0.0, 0.8, 1.0)),
+                                             (50, (0.0, 0.7, 0.2, 1.0)),
+                                             (70, (0.8, 0.8, 0.1, 1.0))] $ \(mini, colour) -> renderPolygon sides (radius mini) origin colour fill
+
+
+
+-- |
+renderCircleCarousel :: Complex Double -> Double -> C.Render ()
+renderCircleCarousel origin time = renderCircleArc 10 origin spread radius begin τ
+    where count  = 10
+          spread = 50 + 50 * (1 + sin (τ * rpm * time)) -- 134      -- Radius of the big circle (pixels?)
+          radius = 20       -- Radius of a small circle (pixels?)
+          rpm    = 0.3      --
+          begin  = τ * rpm * time
+
+
+
+
 -- Geometry ---------------------------------------------------------------------------------------
 -- |
 -- TODO: Start angle
@@ -456,7 +472,7 @@ renderCircleArc
 -- TODO: Make polymorphic
 -- TODO: Move to geometry section
 -- polygon :: (Floating f, RealFloat f) => Int -> f -> Complex f -> [Complex f]
-polygon :: Int -> Double -> Complex Double -> [Complex Double]
+polygon :: Integral int => int -> Double -> Complex Double -> [Complex Double]
 polygon sides radius origin = [ let θ = arg n in origin + ((radius * cos θ):+(radius * sin θ)) | n <- [1..sides]]
     where arg n = fromIntegral n * (2*π)/fromIntegral sides
 
