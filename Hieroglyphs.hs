@@ -68,7 +68,8 @@ import Text.Printf
 
 -- import qualified Control.Lens as Lens --
 
--- import Southpaw.Utilities.Utilities (chunk)
+-- TODO: Collect my libraries in Southpaw package
+import Utilities.Utilities (chunks)
 
 import qualified Copernicus as Cop --
 import qualified Palette           --
@@ -80,12 +81,14 @@ import qualified Palette           --
 ---------------------------------------------------------------------------------------------------
 -- |
 -- TODO: One trail per body ([[Complex Double]]) (?)
-data World = World { frame   :: Int,               -- Frame number
-                     playing :: Bool,              -- Simulation and animations are playing
-                     size    :: (Int, Int),        -- Window size
-                     bodies  :: [Cop.Body Double], -- Bouncing balls
-                     clicks  :: [Complex Double],  -- Click positions
-                     trails  :: [[Complex Double]] -- Past body positions
+-- TODO: Connect bodies and trails (tie related data together properly, eg. with bundled updates like addBody)
+data World = World { frame   :: Int,                -- Frame number
+                     playing :: Bool,               -- Simulation and animations are playing
+                     size    :: (Int, Int),         -- Window size
+                     bodies  :: [Cop.Body Double],  -- Bouncing balls
+                     clicks  :: [Complex Double],   -- Click positions
+                     trails  :: [[Complex Double]], -- Past body positions
+                     transaction :: Transaction     --
                    } deriving Show
 
 
@@ -101,6 +104,10 @@ data Drawable = Drawable { visible :: Bool,                         --
                            centre  :: Complex Double,               --
                            paint   :: Complex Double -> C.Render () --
                          } --deriving Show
+
+
+-- |
+data Transaction = Transaction (Maybe (Complex Double)) (Maybe (Complex Double)) deriving Show
 
 
 
@@ -159,10 +166,10 @@ mainGTK = do
 
     -- Events
     canvas `on` draw $ ondraw worldVar planets
-    canvas `on` motionNotifyEvent $ onmousemove
+    canvas `on` motionNotifyEvent $ onmousemove worldVar
 
     canvas `on` buttonPressEvent   $ onbuttonpress worldVar
-    canvas `on` buttonReleaseEvent $ onbuttonreleased
+    canvas `on` buttonReleaseEvent $ onbuttonreleased worldVar
 
     window `on` configureEvent $ onresize window worldVar
     window `on` deleteEvent $ C.liftIO mainQuit >> return False -- TODO: Uhmmm... what?
@@ -206,26 +213,32 @@ onkeypress = do
 -- onbuttonpress :: IORef World -> IO Bool
 onbuttonpress worldVar = do
     (x, y) <- eventCoordinates
-    C.liftIO $ modifyIORef worldVar $ \ wd@(World { clicks=c }) -> wd { clicks=(x:+y):c }
+    world <- C.liftIO $ readIORef worldVar
+    C.liftIO $ printf "Added body\n"
+    C.liftIO $ modifyIORef worldVar $ \ wd@(World { clicks=c, trails=t }) -> wd { clicks=(x:+y):c,
+                                                                                  trails=[]:t,
+                                                                                  transaction=let p = Just . toWorldCoords world $ x:+y in Transaction p p }
     return True
 
 
 
 -- |
 -- onbuttonreleased ::
-onbuttonreleased = do
+onbuttonreleased worldVar = do
         (x, y) <- eventCoordinates
-        C.liftIO $ printf "Mouse up (%f, %f)\n" x y
+        C.liftIO $ modifyIORef worldVar $ \ wd@(World { transaction=Transaction (Just fr) (Just to), bodies=b }) -> wd { transaction=Transaction Nothing Nothing,
+                                                                                                                         bodies=Cop.Body fr ((3:+0) * (fr-to)) g : b }
         return True
 
 
 
 -- |
 -- onmousemove :: 
-onmousemove = do
-    when False $ do
-        (mx,my) <- eventCoordinates
-        C.liftIO $ print (mx,my)
+onmousemove worldVar = do
+    (mx,my) <- eventCoordinates
+    C.liftIO $ modifyIORef worldVar $ \ wd@(World { transaction=Transaction a b }) -> case (a, b) of
+        (Just from, Just to) -> wd { transaction=Transaction a (Just . toWorldCoords wd $ mx:+my) }
+        _                    -> wd
     return False
 
 
@@ -244,9 +257,10 @@ createWorld :: Int -> Int -> World
 createWorld w h = World { frame=0,
                           playing=True,
                           size=(w,h),
-                          bodies=bodies',
+                          bodies=[], --bodies',
                           trails=map (const []) bodies',
-                          clicks=[] }
+                          clicks=[],
+                          transaction=Transaction Nothing Nothing }
     where bodies' = map (\ (p', v') -> Cop.Body p' v' g) [(0.0:+1.0, v), (1.0:+0.0, (2.0):+1.50), (3.0:+(2.80), v), (2.5:+1.92, v), (3.5:+1.92, 2.2:+(-3.5)), (4.5:+0.92, v)]
 
 
@@ -283,7 +297,6 @@ elapsed world = (fromIntegral $ frame world) * 1.0/fromIntegral fps
 -- TODO: Apply coordinate transformations (to World perhaps; make world a monad?)
 renderBody :: Cop.Body Double -> World -> C.Render ()
 renderBody (Cop.Body p (vx:+vy) (ax:+ay)) world = do
-    -- C.arc (x/3 + 200) (y/3 + 200) 12 0 τ
     -- Body
     vectorise C.arc (toScreenCoords world p) 12 0 τ
     C.setSourceRGBA 0.5 0.2 0.3 1.0
@@ -291,19 +304,14 @@ renderBody (Cop.Body p (vx:+vy) (ax:+ay)) world = do
 
     -- Vector arrows
     -- TODO: Scaling and labelling vectors
-    let from = toScreenCoords world p
-        to   = toScreenCoords world $ p + (0:+0.2*vy)
-        len  = realPart . abs $ to - from 
-        in renderArrow from to (0.8*len) 5 12
-    C.setSourceRGBA 0.12 0.05 1 0.8
-    C.fill
-
-    let from = toScreenCoords world p
-        to   = toScreenCoords world $ p + (0.2*vx:+0)
-        len  = realPart . abs $ to - from 
-        in renderArrow from to (0.8*len) 5 12
-    C.setSourceRGBA 1 0.05 0.12 0.8
-    C.fill
+    renderVector (0:+0.2*vy) (0.12, 0.05, 1, 0.8)
+    renderVector (0.2*vx:+0) (1, 0.05, 0.12, 0.8)
+    where renderVector apart cl = do
+            let from = toScreenCoords world p
+            let to   = toScreenCoords world $ p + apart
+            renderArrow from to ((0.8 *) . magnitude $ to - from) 5 12
+            Palette.choose cl
+            C.fill
 
 
 
@@ -325,16 +333,33 @@ renderWorld world = do
 
     -- Trail(s)
     -- TODO: Better way of doing 2D 'loops'
-    forM_ (zip [Palette.aquamarine,
-                Palette.gold,
-                Palette.orange,
-                Palette.crimson,
-                Palette.firebrick,
-                Palette.darkviolet] . map (map $ toScreenCoords world) $ trails world) $ uncurry renderTrail
+    forM_ (zip (cycle colours) . map (map $ toScreenCoords world) $ trails world) $ uncurry renderTrail
+
+    -- Render temporary ball and arrow
+    case transaction world of
+        (Transaction (Just from) (Just to)) -> do
+            let (from', to') = (toScreenCoords world from, toScreenCoords world to)
+            -- C.liftIO $ putStrLn "Testing 1"
+            -- C.liftIO $ printf "from=(%f, %f), to=(%f, %f)" (realPart from') (imagPart from') (realPart to') (imagPart to')
+            renderCircle from' 12
+
+            Palette.choose Palette.turquoise
+            renderArrow from' (from' + (from'-to')) ((0.8 *) . magnitude $ to'-from') 14 24 
+            C.fill
+        _                                   -> return ()
 
     -- Render bodies
     forM_ (bodies world) $ flip renderBody world
-
+    where colours = [Palette.aquamarine,
+                     Palette.gold,
+                     Palette.orange,
+                     Palette.crimson,
+                     Palette.firebrick,
+                     Palette.darkviolet,
+                     Palette.darkseagreen,
+                     Palette.hotpink,
+                     Palette.honeydew,
+                     Palette.azure]
 
 
 -- | renderTrail
@@ -444,10 +469,8 @@ render world planets = do
     when True  $ renderWorld world                                                  -- Bouncing balls
     when False $ renderCircleCarousel ((0.5:+0)*sizeAsVector world) (elapsed world) -- Circle carousel
 
-    when True $ renderClicks (take 20 $ clicks world) --
-    when True $ forM_ (chunks 3 $ clicks world) $ \chunk -> case chunk of
-        [a,b,c] -> Palette.choose Palette.darkolivegreen >> renderBezier a b c >> C.stroke
-        _       -> return ()
+    when False $ renderClicks (take 20 $ clicks world) -- 
+    when False $ renderCurvedPath $ clicks world       -- 
 
 
 
@@ -509,7 +532,7 @@ renderWonkyArrowsPointingAtBalls targets = do
 
 -- |
 renderNestedPolygons :: Complex Double -> Double -> C.Render ()
-renderNestedPolygons origin time = forM_ (zip [10, 30..] colours) $ \(mini, colour) -> renderPolygon sides (radius mini) origin colour fill
+renderNestedPolygons origin time = forM_ (zip [10, 30..] $ cycle colours) $ \(mini, colour) -> renderPolygon sides (radius mini) origin colour fill
     where sides       = 3 + (floor time `mod` 10)
           radius mini = (+mini) . (*35.0) . (+1.0) . sin $ time
           fill        = False
@@ -518,7 +541,10 @@ renderNestedPolygons origin time = forM_ (zip [10, 30..] colours) $ \(mini, colo
                           Palette.darkorchid,
                           Palette.darkslategray,
                           Palette.crimson,
-                          Palette.darkgoldenrod]
+                          Palette.darkgoldenrod,
+                          Palette.darkseagreen,
+                          Palette.hotpink,
+                          Palette.honeydew]
 
 
 
@@ -539,6 +565,18 @@ renderClicks :: [Complex Double] -> C.Render ()
 renderClicks clicks' = do
     Palette.choose Palette.darkmagenta
     renderPath clicks'
+
+
+
+-- |
+renderCurvedPath :: [Complex Double] -> C.Render ()
+renderCurvedPath path = do
+    forM_ (chunks 3 path) $ \chunk -> case chunk of
+        [a,b,c] -> renderBezier a b c
+        _       -> return ()
+    C.setLineWidth 12
+    Palette.choose Palette.darkturquoise
+    C.stroke
 
 
 
@@ -640,7 +678,7 @@ toScreenCoords world = scale (sx:+sy) . translate translation
 -- TODO: Don't hard-code the world-size of the canvas (currently 10-by-10)
 toWorldCoords :: World -> Complex Double -> Complex Double
 toWorldCoords world = translate (-translation) . scale (sx**(-1):+sy**(-1))
-    where (w, h) = let (w', h') = size world in (fromIntegral w', fromIntegral h')
+    where (w:+h)      = sizeAsVector world
           (sx:+sy)    = (w/10):+(-h/10)
           translation = (w/(2*sx)):+(h/(2*sy))
 

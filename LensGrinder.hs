@@ -22,7 +22,7 @@
 
 
 
-module LenseGrinder where
+-- module LensGrinder where
 
 
 
@@ -30,6 +30,7 @@ module LenseGrinder where
 -- We'll need these
 ---------------------------------------------------------------------------------------------------
 import Control.Lens
+import Control.Monad.State (State, execState, get)
 
 
 
@@ -40,12 +41,28 @@ type Degrees = Double
 type Latitude = Degrees
 type Longitude = Degrees
 
-data Meetup = Meetup { _name :: String, _location :: (Latitude, Longitude) }
+-- data Meetup = Meetup { _name :: String, _location :: (Latitude, Longitude) }
+data Player = Player { _name :: String, _position :: (Double, Double), _health :: Int } deriving Show
 
-makeLenses ''Meetup
+-- makeLenses ''Meetup
+makeLenses ''Player
 
 
 
 ---------------------------------------------------------------------------------------------------
 -- Functions
 ---------------------------------------------------------------------------------------------------
+
+
+
+---------------------------------------------------------------------------------------------------
+-- Entry point
+---------------------------------------------------------------------------------------------------
+main :: IO ()
+main = do
+	let player = Player { _name="Jonatan", _position=(5, 13), _health=100 }
+	print . flip execState player $ do
+		health -= 5
+		name %= (++" the Brave")
+	s <- getLine
+	return ()
