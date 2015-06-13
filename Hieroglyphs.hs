@@ -445,7 +445,7 @@ render world planets = do
     when False $ renderCircleCarousel ((0.5:+0)*sizeAsVector world) (elapsed world) -- Circle carousel
 
     when True $ renderClicks (take 20 $ clicks world) --
-    when True $ forM_ (chunks 3 $ clicks world) \chunk -> case chunk of
+    when True $ forM_ (chunks 3 $ clicks world) $ \chunk -> case chunk of
         [a,b,c] -> Palette.choose Palette.darkolivegreen >> renderBezier a b c >> C.stroke
         _       -> return ()
 
