@@ -26,14 +26,15 @@
 
 
 
-module Main where
+module Copernicus.Main where
 
 
 
 ---------------------------------------------------------------------------------------------------
 -- We'll need these
 ---------------------------------------------------------------------------------------------------
-import GlossGraphics
+-- import Copernicus.GlossGraphics
+import Copernicus.Hieroglyphs
 
 
 

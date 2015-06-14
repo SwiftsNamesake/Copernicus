@@ -22,7 +22,7 @@
 
 
 
--- module LensGrinder where
+module Copernicus.LensGrinder where
 
 
 
@@ -62,7 +62,6 @@ main :: IO ()
 main = do
 	let player = Player { _name="Jonatan", _position=(5, 13), _health=100 }
 	print . flip execState player $ do
-		health -= 5
-		name %= (++" the Brave")
+		health %= (*0.95)
 	s <- getLine
 	return ()

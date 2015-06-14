@@ -41,7 +41,7 @@
 ---------------------------------------------------------------------------------------------------
 -- Compiler instructions
 ---------------------------------------------------------------------------------------------------
--- {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 
 
@@ -51,7 +51,7 @@
 ---------------------------------------------------------------------------------------------------
 -- Including a module statement seems to interfer with the compilation process. I need to figure
 -- out how to easily toggle between compile-as-module and compile-as-main.
--- module Hieroglyphs where
+module Copernicus.Hieroglyphs where
 
 
 
@@ -64,9 +64,10 @@ import qualified Graphics.Rendering.Cairo as C --
 import Data.Complex                --
 import Control.Monad (when, forM_) --
 import Data.IORef                  --
-import Text.Printf
+import Text.Printf                 --
 
--- import qualified Control.Lens as Lens --
+-- import qualified Control.Lens (makeLenses) --
+import Control.Monad.State (State, execState, get)
 
 -- TODO: Collect my libraries in Southpaw package
 import Utilities.Utilities (chunks)
@@ -127,7 +128,7 @@ g = 0.0:+(-9.82) --0.0 :+ (-9.82)
 ---------------------------------------------------------------------------------------------------
 -- Lenses
 ---------------------------------------------------------------------------------------------------
--- Lens.makeLenses ''World
+-- Control.Lens.makeLenses ''World
 -- Lens.makeLenses ''Cop.Body
 
 sizeAsVector :: World -> Complex Double
@@ -226,8 +227,9 @@ onbuttonpress worldVar = do
 -- onbuttonreleased ::
 onbuttonreleased worldVar = do
         (x, y) <- eventCoordinates
-        C.liftIO $ modifyIORef worldVar $ \ wd@(World { transaction=Transaction (Just fr) (Just to), bodies=b }) -> wd { transaction=Transaction Nothing Nothing,
-                                                                                                                         bodies=Cop.Body fr ((3:+0) * (fr-to)) g : b }
+        C.liftIO $ modifyIORef worldVar $ \ wd@(World { transaction=Transaction (Just fr) (Just to), bodies=b, trails=t }) -> wd { transaction=Transaction Nothing Nothing,
+                                                                                                                         bodies=Cop.Body fr ((3:+0) * (fr-to)) g : b,
+                                                                                                                         trails=[]:t }
         return True
 
 

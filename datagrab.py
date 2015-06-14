@@ -23,15 +23,16 @@ def main():
 	soup = BeautifulSoup(html)
 
 	with open('colours.txt', 'w', encoding='UTF-8') as f:
+		skipped = []
 		for row in list(soup.body.table.findChildren('tr'))[1:]:
 			cells = row.findChildren('td')
 			try:
 				name, r, g, b = [cells[0].string] + cells[2].string[4:].split(' ')
-				f.write('{name: <21}= ({r:.08f}, {g:.08f}, {b:.08f}, 1) :: Colour\n'.format(name=name, r=float(r), g=float(g), b=float(b)))
-				# print('{name: <21}= ({r:.08f}, {g:.08f}, {b:.08f}, 1) :: Colour'.format(name=name, r=float(r), g=float(g), b=float(b)))
+				# f.write('{name: <21}= ({r:.08f}, {g:.08f}, {b:.08f}, 1) :: Colour\n'.format(name=name, r=float(r), g=float(g), b=float(b)))
+				print('{name: <21}= ({r:.08f}, {g:.08f}, {b:.08f}, 1) :: Colour'.format(name=name, r=float(r), g=float(g), b=float(b)))
 			except Exception as e:
-				print(e)
-				print('Ignoring {0}'.format(row))
+				skipped.append(row)
+		print('Skipped {0} row(s): {1}'.format(len(skipped), ', '.join('({0!r})'.format(row) for row in skipped)))
 
 
 if __name__ == '__main__':

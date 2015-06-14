@@ -1,5 +1,5 @@
 -- |
--- Module      : Copernicus
+-- Module      : Core
 -- Description : Contains the core of the Copernicus project
 -- Copyright   : (c) Jonatan H Sundqvist, 2015
 -- License     : MIT
@@ -27,7 +27,7 @@
 
 
 
-module Copernicus where
+module Copernicus.Core where
 
 
 
