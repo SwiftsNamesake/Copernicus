@@ -32,6 +32,7 @@
 --          -- Utility functions for colour/fill/stroke/line width/etc. (?)
 --
 --        - Application states
+--        - UI
 
 -- SPEC | -
 --        -
@@ -62,12 +63,13 @@ import Graphics.UI.Gtk                         --
 import qualified Graphics.Rendering.Cairo as C --
 
 import Data.Complex                --
+-- import Data.Set                    --
 import Control.Monad (when, forM_) --
 import Data.IORef                  --
 import Text.Printf                 --
 
--- import qualified Control.Lens (makeLenses) --
-import Control.Monad.State (State, execState, get)
+import qualified Control.Lens as Lens              --
+import Control.Monad.State (State, execState, get) --
 
 -- TODO: Collect my libraries in Southpaw package
 import Utilities.Utilities (chunks)
@@ -83,13 +85,14 @@ import qualified Copernicus.Palette as Palette --
 -- |
 -- TODO: One trail per body ([[Complex Double]]) (?)
 -- TODO: Connect bodies and trails (tie related data together properly, eg. with bundled updates like addBody)
-data World = World { frame   :: Int,                -- Frame number
-                     playing :: Bool,               -- Simulation and animations are playing
-                     size    :: (Int, Int),         -- Window size
-                     bodies  :: [Core.Body Double],  -- Bouncing balls
-                     clicks  :: [Complex Double],   -- Click positions
-                     trails  :: [[Complex Double]], -- Past body positions
-                     transaction :: Transaction     --
+data World = World { frame   :: Int,                   -- Frame number
+                     playing :: Bool,                  -- Simulation and animations are playing
+                     size    :: (Int, Int),            -- Window size
+                     bodies  :: [Core.Body Double],    -- Bouncing balls
+                     clicks  :: [Complex Double],      -- Click positions
+                     trails  :: [[Complex Double]],    -- Past body positions
+                     transaction :: Maybe Transaction  --
+                     -- keys        :: Set KeyVal         --
                    } deriving Show
 
 
@@ -108,7 +111,7 @@ data Drawable = Drawable { visible :: Bool,                         --
 
 
 -- |
-data Transaction = Transaction (Maybe (Complex Double)) (Maybe (Complex Double)) deriving Show
+data Transaction = Transaction (Complex Double) (Complex Double) deriving Show
 
 
 
@@ -128,7 +131,7 @@ g = 0.0:+(-9.82) --0.0 :+ (-9.82)
 ---------------------------------------------------------------------------------------------------
 -- Lenses
 ---------------------------------------------------------------------------------------------------
--- Control.Lens.makeLenses ''World
+-- Lens.makeLenses ''World
 -- Lens.makeLenses ''Core.Body
 
 sizeAsVector :: World -> Complex Double
@@ -173,8 +176,8 @@ mainGTK = do
     canvas `on` buttonReleaseEvent $ onbuttonreleased worldVar
 
     window `on` configureEvent $ onresize window worldVar
-    window `on` deleteEvent $ C.liftIO mainQuit >> return False -- TODO: Uhmmm... what?
-    window `on` keyPressEvent $ onkeypress
+    window `on` deleteEvent    $ ondelete
+    window `on` keyPressEvent  $ onkeypress worldVar
 
     mainGUI
 
@@ -203,7 +206,7 @@ onresize window worldVar = do
 
 -- |
 -- onkeypress :: IORef World -> IO Bool
-onkeypress = do
+onkeypress worldVar = do
     key <- eventKeyName
     C.liftIO $ print key
     return True
@@ -216,9 +219,8 @@ onbuttonpress worldVar = do
     (x, y) <- eventCoordinates
     world <- C.liftIO $ readIORef worldVar
     C.liftIO $ printf "Added body\n"
-    C.liftIO $ modifyIORef worldVar $ \ wd@(World { clicks=c, trails=t }) -> wd { clicks=(x:+y):c,
-                                                                                  trails=[]:t,
-                                                                                  transaction=let p = Just . toWorldCoords world $ x:+y in Transaction p p }
+    C.liftIO $ modifyIORef worldVar $ \ wd@(World { clicks=c }) -> wd { clicks=(x:+y):c,
+                                                                        transaction=let p = toWorldCoords world $ x:+y in Just $ Transaction p p }
     return True
 
 
@@ -227,9 +229,9 @@ onbuttonpress worldVar = do
 -- onbuttonreleased ::
 onbuttonreleased worldVar = do
         (x, y) <- eventCoordinates
-        C.liftIO $ modifyIORef worldVar $ \ wd@(World { transaction=Transaction (Just fr) (Just to), bodies=b, trails=t }) -> wd { transaction=Transaction Nothing Nothing,
-                                                                                                                         bodies=Core.Body fr ((3:+0) * (fr-to)) g : b,
-                                                                                                                         trails=[]:t }
+        C.liftIO $ modifyIORef worldVar $ \ wd@(World { bodies=b, trails=t, transaction=Just (Transaction fr to) }) -> wd { transaction=Nothing,
+                                                                                                                            bodies=Core.Body fr ((3:+0) * (fr-to)) g : b,
+                                                                                                                            trails=[]:t }
         return True
 
 
@@ -238,18 +240,23 @@ onbuttonreleased worldVar = do
 -- onmousemove :: 
 onmousemove worldVar = do
     (mx,my) <- eventCoordinates
-    C.liftIO $ modifyIORef worldVar $ \ wd@(World { transaction=Transaction a b }) -> case (a, b) of
-        (Just from, Just to) -> wd { transaction=Transaction a (Just . toWorldCoords wd $ mx:+my) }
-        _                    -> wd
+    C.liftIO $ modifyIORef worldVar $ \ wd@(World { transaction=action }) -> wd { transaction=action >>= \(Transaction fr _) -> Just . Transaction fr . toWorldCoords wd $ mx:+my }
     return False
 
 
 
 -- | 
 -- ondraw ::
-ondraw worldVar planets = do
-    world <- C.liftIO  $ readIORef worldVar
-    render world planets -- readIORef worldVar >>= \ w -> render (fromIntegral w) (fromIntegral h) w
+ondraw worldVar planets = C.liftIO (readIORef worldVar) >>= flip render planets
+
+
+
+-- |
+ondelete = do
+    -- TODO: Uhmmm... what?
+    C.liftIO mainQuit
+    C.liftIO $ putStrLn "Goodbye!"
+    return False
 
 
 
@@ -262,7 +269,8 @@ createWorld w h = World { frame=0,
                           bodies=[], --bodies',
                           trails=map (const []) bodies',
                           clicks=[],
-                          transaction=Transaction Nothing Nothing }
+                          transaction=Nothing
+                          {-keys=empty-} }
     where bodies' = map (\ (p', v') -> Core.Body p' v' g) [(0.0:+1.0, v), (1.0:+0.0, (2.0):+1.50), (3.0:+(2.80), v), (2.5:+1.92, v), (3.5:+1.92, 2.2:+(-3.5)), (4.5:+0.92, v)]
 
 
@@ -338,29 +346,15 @@ renderWorld world = do
     forM_ (zip (cycle colours) . map (map $ toScreenCoords world) $ trails world) $ uncurry renderTrail
 
     -- Render temporary ball and arrow
-    case transaction world of
-        (Transaction (Just from) (Just to)) -> do
-            let (from', to') = (toScreenCoords world from, toScreenCoords world to)
-            -- C.liftIO $ putStrLn "Testing 1"
-            -- C.liftIO $ printf "from=(%f, %f), to=(%f, %f)" (realPart from') (imagPart from') (realPart to') (imagPart to')
-            renderCircle from' 12
-
-            Palette.choose Palette.turquoise
-            renderArrow from' (from' + (from'-to')) ((0.8 *) . magnitude $ to'-from') 14 24 
-            C.fill
-        _                                   -> return ()
+    -- TODO: Refactor with do notation or Maybe
+    
+    maybe (return ()) (renderLaunch world) $ transaction world
 
     -- Render bodies
     forM_ (bodies world) $ flip renderBody world
-    where colours = [Palette.aquamarine,
-                     Palette.gold,
-                     Palette.orange,
-                     Palette.crimson,
-                     Palette.firebrick,
-                     Palette.darkviolet,
-                     Palette.darkseagreen,
-                     Palette.hotpink,
-                     Palette.honeydew,
+    where colours = [Palette.aquamarine,   Palette.gold,      Palette.orange,
+                     Palette.crimson,      Palette.firebrick, Palette.darkviolet,
+                     Palette.darkseagreen, Palette.hotpink,   Palette.honeydew,
                      Palette.azure]
 
 
@@ -538,15 +532,9 @@ renderNestedPolygons origin time = forM_ (zip [10, 30..] $ cycle colours) $ \(mi
     where sides       = 3 + (floor time `mod` 10)
           radius mini = (+mini) . (*35.0) . (+1.0) . sin $ time
           fill        = False
-          colours     = [ Palette.cornflowerblue,
-                          Palette.darkolivegreen,
-                          Palette.darkorchid,
-                          Palette.darkslategray,
-                          Palette.crimson,
-                          Palette.darkgoldenrod,
-                          Palette.darkseagreen,
-                          Palette.hotpink,
-                          Palette.honeydew]
+          colours     = [Palette.cornflowerblue, Palette.darkolivegreen, Palette.darkorchid,
+                         Palette.darkslategray,  Palette.crimson,        Palette.darkgoldenrod,
+                         Palette.darkseagreen,   Palette.hotpink,        Palette.honeydew]
 
 
 
@@ -579,6 +567,17 @@ renderCurvedPath path = do
     C.setLineWidth 12
     Palette.choose Palette.darkturquoise
     C.stroke
+
+
+
+-- |
+renderLaunch :: World -> Transaction -> C.Render ()
+renderLaunch world (Transaction from to) = do
+        let (from', to') = (toScreenCoords world from, toScreenCoords world to)
+        renderCircle from' 12
+        Palette.choose Palette.turquoise
+        renderArrow from' (2*from' - to') ((0.8 *) . magnitude $ to'-from') 14 24 
+        C.fill
 
 
 
@@ -695,5 +694,5 @@ bodyToScreenCoords world (Core.Body p v' a') = Core.Body (toScreenCoords world p
 ---------------------------------------------------------------------------------------------------
 -- Entry point
 ---------------------------------------------------------------------------------------------------
-main :: IO ()
-main = mainGTK
+-- main :: IO ()
+-- main = mainGTK

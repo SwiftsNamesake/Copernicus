@@ -26,7 +26,7 @@
 
 
 
-module Copernicus.Main where
+module Main where
 
 
 
@@ -34,7 +34,7 @@ module Copernicus.Main where
 -- We'll need these
 ---------------------------------------------------------------------------------------------------
 -- import Copernicus.GlossGraphics
-import Copernicus.Hieroglyphs
+import qualified Copernicus.Hieroglyphs as Hieroglyphs
 
 
 
@@ -43,5 +43,5 @@ import Copernicus.Hieroglyphs
 ---------------------------------------------------------------------------------------------------
 main :: IO ()
 main = do
-	simulate
+	Hieroglyphs.mainGTK
 	putStrLn "Finished"

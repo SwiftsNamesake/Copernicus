@@ -42,9 +42,14 @@ build-type:          Simple
 cabal-version:       >=1.8
 
 
+source-repository head
+  type:     git
+  location: https://github.com/SwiftsNamesake/Copernicus.git
+
+
 executable Copernicus
   -- .hs or .lhs file containing the Main module.
-  main-is:             Copernicus/main.hs
+  main-is:             Copernicus/Main.hs
   
   --
   Hs-source-dirs:      lib
@@ -54,4 +59,4 @@ executable Copernicus
   -- exposed-modules:     _
 
   -- Other library packages from which modules are imported.
-  build-depends:       base ==4.6.*, gloss, gtk3, lens
+  build-depends:       base ==4.6.*, gloss, gtk3, lens, cairo, Southpaw, mtl, containers
