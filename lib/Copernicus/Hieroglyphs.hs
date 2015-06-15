@@ -72,8 +72,8 @@ import Control.Monad.State (State, execState, get)
 -- TODO: Collect my libraries in Southpaw package
 import Utilities.Utilities (chunks)
 
-import qualified Copernicus.Core as Cop --
-import qualified Palette           --
+import qualified Copernicus.Core as Core       --
+import qualified Copernicus.Palette as Palette --
 
 
 

@@ -94,9 +94,10 @@ parabola t (px:+py) (vx:+vy) (ax:+ay) = (px + vx*t + 0.5*ax*t**2) :+ (py + vy*t 
 -- TODO: Don't hard-code bounds (left, right)
 -- TODO: Take bounds of Body into account (don't hard-code that either)
 collide :: (RealFloat f, Floating f) => f -> Body f -> Body f
-collide gnd (Body (px:+py) (vx:+vy) a) = Body (px:+py) ((invertIf (\ _ -> (px <= left) || ( px >= right)) vx) :+ (invertIf (\ v -> (v < 0) && (py <= gnd)) vy)) a
-	where invertIf p v | p v 	   = -v
+collide gnd (Body (px:+py) (vx:+vy) a) = Body (px:+py) (flipWhen (const . not $ between left px right) vx :+ flipWhen (((py <= gnd) &&) . (<0)) vy) a
+	where flipWhen p v | p v 	   = -v
 	                   | otherwise =  v
+	      between a b c = (a < b) && (b < c)
 	      (left, right) = (-5, 5) --(15-720/2, 720/2-30/2)
 
 
@@ -104,7 +105,7 @@ collide gnd (Body (px:+py) (vx:+vy) a) = Body (px:+py) ((invertIf (\ _ -> (px <=
 -- | ETA (estimated time of arrival), given the inital position (p') and velocity (v')
 --   and the acceleration.
 -- TODO: Deal with v=0, a=0 (✓)
--- TODO: Take collisions into account, both axis (?)
+-- TODO: Take collisions into account, both axes (?)
 -- TODO: Rename (eg. timeUntil, solveForT, predict, etc)
 -- TODO: Simplify if possible
 -- TODO: Parabola type (eg. Parabola a v x)
@@ -119,8 +120,8 @@ solveParabola p' v' 0  p
 	| otherwise              = Just $ (p - p')/v'
 
 solveParabola p' v' a' p
-	| discriminant > 0  = Just $ (-v'/a') + sqrt discriminant
-	| otherwise         = Nothing
+	| discriminant > 0 = Just $ (-v'/a') + sqrt discriminant
+	| otherwise        = Nothing
 	where discriminant = (v'/a')**2 - 2*(p' - p)/a' -- We're not interested in imaginary solutions
 
 
