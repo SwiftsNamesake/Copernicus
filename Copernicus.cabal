@@ -59,4 +59,4 @@ executable Copernicus
   -- exposed-modules:     _
 
   -- Other library packages from which modules are imported.
-  build-depends:       base ==4.6.*, gloss, gtk3, lens, cairo, Southpaw, mtl, containers
+  build-depends:       base ==4.7.*, gloss, gtk3, lens, cairo, Southpaw, mtl, containers

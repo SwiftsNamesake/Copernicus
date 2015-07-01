@@ -15,7 +15,11 @@
 --        - Performance profiling (feels chuggish sometimes, consumes a lot of CPU power)
 --        - Figure out how to deal with polymorphic numerical types
 --        - Polymorphic wrappers around core rendering functions
+--
 --        - This module should only deal with graphics
+--          -- Break up into several modules
+--          -- Figure out how to properly deal with world updates and data passing
+--
 --        - Work out how to deal with state (logical/interaction/graphical)
 --        - Wrap up graphical/animation state in single object (eg. Renderable ball with trail/colour/arrows/etc.)
 --          -- Toggle visibility (eg. with checkbuttons)
