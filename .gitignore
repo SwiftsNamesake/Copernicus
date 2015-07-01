@@ -3,4 +3,5 @@
 *.hi
 *.o
 dist/
-cabal-dev/
+.*
+!/.gitignore

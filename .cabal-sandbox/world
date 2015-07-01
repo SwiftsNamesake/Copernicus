@@ -1,5 +1,0 @@
-cabal-install -any
-cairo -any
-gloss -any
-gtk3 -any
-lens -any
