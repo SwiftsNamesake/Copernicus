@@ -16,7 +16,7 @@ version:             0.1.0.0
 synopsis:            Classical physics in two dimensions
 
 -- A longer description of the package.
--- description:         
+description:        I should probably add a proper description, but this will silence the complaints for now. 
 
 -- URL for the project homepage or repository.
 homepage:            https://github.com/SwiftsNamesake/Copernicus
